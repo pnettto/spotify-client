@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Album Vault | My Collection</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap"
+      rel="stylesheet"
+    >
+    <link rel="stylesheet" href="style.css">
+  </head>
+  <body>
+    <div class="background-glow"></div>
+
+    <main class="container">
+      <header>
+        <div class="logo">
+          <span class="icon">💿</span>
+          <h1>My<span>Vault</span></h1>
+        </div>
+        <p class="subtitle" id="user-context">
+          Your private Spotify collection, synchronized.
+        </p>
+      </header>
+
+      <section class="controls-section">
+        <div class="input-group">
+          <button id="fetch-btn">Loading...</button>
+        </div>
+        <div id="status" class="status-message"></div>
+      </section>
+
+      <section class="albums-grid" id="albums-grid">
+        <!-- Albums will be injected here -->
+        <div class="empty-state">
+          <p>Establishing connection to the vault...</p>
+        </div>
+      </section>
+    </main>
+
+    <template id="album-card-template">
+      <div class="album-card">
+        <div class="album-cover">
+          <img src="" alt="Album Cover" loading="lazy">
+          <div class="album-overlay">
+            <a href="" target="_blank" class="view-link">View Album</a>
+          </div>
+        </div>
+        <div class="album-info">
+          <h3 class="album-name"></h3>
+          <p class="album-artist"></p>
+          <p class="album-year"></p>
+        </div>
+      </div>
+    </template>
+
+    <script src="script.js"></script>
+  </body>
+</html>
