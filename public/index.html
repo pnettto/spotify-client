@@ -27,6 +27,47 @@
       </header>
 
       <section class="controls-section">
+        <div class="search-container">
+          <input
+            type="text"
+            id="search-input"
+            placeholder="Search albums or artists..."
+          >
+        </div>
+
+        <div class="filter-bar">
+          <div class="filter-group">
+            <label>Decade</label>
+            <select id="decade-filter">
+              <option value="all">All Decades</option>
+              <option value="2020">2020s</option>
+              <option value="2010">2010s</option>
+              <option value="2000">2000s</option>
+              <option value="1990">1990s</option>
+              <option value="1980">1980s</option>
+              <option value="1970">1970s</option>
+              <option value="older">Older</option>
+            </select>
+          </div>
+
+          <div class="filter-group">
+            <label>Genre</label>
+            <select id="genre-filter">
+              <option value="all">All Genres</option>
+            </select>
+          </div>
+
+          <div class="filter-group">
+            <label>Sort By</label>
+            <select id="sort-select">
+              <option value="date-desc">Newest First</option>
+              <option value="date-asc">Oldest First</option>
+              <option value="name-asc">Album (A-Z)</option>
+              <option value="artist-asc">Artist (A-Z)</option>
+            </select>
+          </div>
+        </div>
+
         <div class="input-group">
           <button id="fetch-btn">Loading...</button>
         </div>

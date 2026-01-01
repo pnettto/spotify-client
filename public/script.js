@@ -1,3 +1,6 @@
+let allAlbums = [];
+let filteredAlbums = [];
+
 async function checkAuthStatus() {
   const response = await fetch("/api/auth/status");
   const data = await response.json();
@@ -8,7 +11,6 @@ async function checkAuthStatus() {
     fetchBtn.textContent = "Sync Library";
     fetchBtn.classList.add("authenticated");
     status.textContent = "Connected to Spotify. Click to sync.";
-    // Auto-fetch if authenticated
     fetchAlbums();
   } else {
     fetchBtn.textContent = "Login with Spotify";
@@ -41,8 +43,11 @@ async function fetchAlbums() {
       throw new Error(data.error || "Failed to fetch albums");
     }
 
-    renderAlbums(data.albums);
-    status.textContent = `Library updated: ${data.albums.length} albums found.`;
+    allAlbums = data.albums;
+    populateGenreFilter(allAlbums);
+    applyFilters();
+
+    status.textContent = `Library updated: ${allAlbums.length} albums found.`;
     status.style.color = "var(--accent-color)";
   } catch (error) {
     status.textContent = error.message;
@@ -55,17 +60,90 @@ async function fetchAlbums() {
   }
 }
 
+function populateGenreFilter(albums) {
+  const genreFilter = document.getElementById("genre-filter");
+  const genres = new Set();
+  albums.forEach((album) => {
+    album.genres.forEach((g) => genres.add(g));
+  });
+
+  const sortedGenres = Array.from(genres).sort();
+
+  // Clear existing except first
+  genreFilter.innerHTML = '<option value="all">All Genres</option>';
+  sortedGenres.forEach((genre) => {
+    const option = document.createElement("option");
+    option.value = genre;
+    option.textContent = genre.charAt(0).toUpperCase() + genre.slice(1);
+    genreFilter.appendChild(option);
+  });
+}
+
+function applyFilters() {
+  const searchQuery = document.getElementById("search-input").value
+    .toLowerCase();
+  const decadeFilter = document.getElementById("decade-filter").value;
+  const genreFilter = document.getElementById("genre-filter").value;
+  const sortSelect = document.getElementById("sort-select").value;
+
+  filteredAlbums = allAlbums.filter((album) => {
+    const matchesSearch = album.name.toLowerCase().includes(searchQuery) ||
+      album.artist.toLowerCase().includes(searchQuery);
+
+    const albumYear = parseInt(album.year);
+    let matchesDecade = true;
+    if (decadeFilter !== "all") {
+      if (decadeFilter === "older") {
+        matchesDecade = albumYear < 1970;
+      } else {
+        const decadeStart = parseInt(decadeFilter);
+        matchesDecade = albumYear >= decadeStart &&
+          albumYear < decadeStart + 10;
+      }
+    }
+
+    const matchesGenre = genreFilter === "all" ||
+      album.genres.includes(genreFilter);
+
+    return matchesSearch && matchesDecade && matchesGenre;
+  });
+
+  // Sort
+  filteredAlbums.sort((a, b) => {
+    switch (sortSelect) {
+      case "date-desc":
+        return new Date(b.full_date) - new Date(a.full_date);
+      case "date-asc":
+        return new Date(a.full_date) - new Date(b.full_date);
+      case "name-asc":
+        return a.name.localeCompare(b.name);
+      case "artist-asc":
+        return a.artist.localeCompare(b.artist);
+      default:
+        return 0;
+    }
+  });
+
+  renderAlbums(filteredAlbums);
+}
+
 document.getElementById("fetch-btn").addEventListener("click", async () => {
-  const response = await fetch("/api/auth/status");
-  const data = await response.json();
-
-  if (!data.authenticated) {
-    globalThis.location.href = "/login";
-    return;
-  }
-
-  fetchAlbums();
+  const auth = await checkAuthStatus();
+  if (!auth) globalThis.location.href = "/login";
+  else fetchAlbums();
 });
+
+// Event listeners for filters
+document.getElementById("search-input").addEventListener("input", applyFilters);
+document.getElementById("decade-filter").addEventListener(
+  "change",
+  applyFilters,
+);
+document.getElementById("genre-filter").addEventListener(
+  "change",
+  applyFilters,
+);
+document.getElementById("sort-select").addEventListener("change", applyFilters);
 
 function renderAlbums(albums) {
   const albumsGrid = document.getElementById("albums-grid");
@@ -75,7 +153,7 @@ function renderAlbums(albums) {
 
   if (albums.length === 0) {
     albumsGrid.innerHTML =
-      '<div class="empty-state">Your Spotify library is empty!</div>';
+      '<div class="empty-state">No albums match your filters.</div>';
     return;
   }
 
@@ -83,7 +161,7 @@ function renderAlbums(albums) {
     const clone = template.content.cloneNode(true);
     const card = clone.querySelector(".album-card");
 
-    card.style.animationDelay = `${index * 0.05}s`;
+    card.style.animationDelay = `${index * 0.02}s`;
 
     const img = clone.querySelector("img");
     img.src = album.cover || "https://via.placeholder.com/300?text=No+Cover";
@@ -100,5 +178,4 @@ function renderAlbums(albums) {
   });
 }
 
-// Initial check
 checkAuthStatus();

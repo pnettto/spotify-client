@@ -18,14 +18,16 @@ interface Album {
   name: string;
   artist: string;
   year: string;
+  full_date: string;
   cover: string;
   link: string;
+  genres: string[];
 }
 
 interface SpotifyAlbumItem {
   album: {
     name: string;
-    artists: { name: string }[];
+    artists: { id: string; name: string }[];
     release_date: string;
     images: { url: string }[];
     external_urls: { spotify: string };
@@ -96,7 +98,7 @@ app.get("/callback", async (c) => {
   return c.text("Authentication failed", 400);
 });
 
-// 3. Fetch User's Saved Albums (All Pages)
+// 3. Fetch User's Saved Albums (All Pages with Genres)
 async function fetchUserAlbums(token: string): Promise<Album[]> {
   let allAlbums: Album[] = [];
   let nextUrl: string | null = "https://api.spotify.com/v1/me/albums?limit=50";
@@ -115,13 +117,43 @@ async function fetchUserAlbums(token: string): Promise<Album[]> {
     const data = await response.json();
     if (!data.items) break;
 
-    const pageItems = data.items.map((item: SpotifyAlbumItem) => ({
-      name: item.album.name,
-      artist: item.album.artists.map((a) => a.name).join(", "),
-      year: item.album.release_date.split("-")[0],
-      cover: item.album.images[0]?.url || "",
-      link: item.album.external_urls.spotify,
-    }));
+    // Collect artist IDs to fetch genres (since albums often have empty genres)
+    const artistIds = [
+      ...new Set(
+        data.items.map((item: SpotifyAlbumItem) => item.album.artists[0].id),
+      ),
+    ].join(",");
+    const genreMap: Record<string, string[]> = {};
+
+    if (artistIds) {
+      const artistResponse = await fetch(
+        `https://api.spotify.com/v1/artists?ids=${artistIds}`,
+        {
+          headers: { "Authorization": `Bearer ${token}` },
+        },
+      );
+      if (artistResponse.ok) {
+        const artistData = await artistResponse.json();
+        artistData.artists.forEach(
+          (artist: { id: string; genres: string[] }) => {
+            genreMap[artist.id] = artist.genres;
+          },
+        );
+      }
+    }
+
+    const pageItems = data.items.map((item: SpotifyAlbumItem) => {
+      const primaryArtistId = item.album.artists[0].id;
+      return {
+        name: item.album.name,
+        artist: item.album.artists.map((a) => a.name).join(", "),
+        year: item.album.release_date.split("-")[0],
+        full_date: item.album.release_date,
+        cover: item.album.images[0]?.url || "",
+        link: item.album.external_urls.spotify,
+        genres: genreMap[primaryArtistId] || [],
+      };
+    });
 
     allAlbums = [...allAlbums, ...pageItems];
     nextUrl = data.next;
