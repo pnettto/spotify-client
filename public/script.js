@@ -175,7 +175,12 @@ function renderAlbums(albums) {
 
     // Use a direct click listener on the card instead of an overlay
     card.addEventListener("click", () => {
-      globalThis.open(album.link, "_blank");
+      const spotifyUri = album.uri ||
+        album.link.replace("https://open.spotify.com/", "spotify:").replace(
+          /\//g,
+          ":",
+        );
+      globalThis.location.href = spotifyUri;
     });
     card.style.cursor = "pointer";
 

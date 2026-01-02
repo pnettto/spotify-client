@@ -22,6 +22,7 @@ interface Album {
   full_date: string;
   cover: string;
   link: string;
+  uri: string;
   genres: string[];
 }
 
@@ -32,6 +33,7 @@ interface SpotifyAlbumItem {
     release_date: string;
     images: { url: string }[];
     external_urls: { spotify: string };
+    uri: string;
   };
 }
 
@@ -159,6 +161,7 @@ async function syncLibrary(token: string) {
       full_date: i.album.release_date,
       cover: i.album.images[0]?.url || "",
       link: i.album.external_urls.spotify,
+      uri: i.album.uri,
       genres: genreMap[i.album.artists[0].id] || [],
     }));
 
