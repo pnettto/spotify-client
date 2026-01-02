@@ -4,34 +4,53 @@ let filteredAlbums = [];
 async function checkAuthStatus() {
   const response = await fetch("/api/auth/status");
   const data = await response.json();
-  const fetchBtn = document.getElementById("fetch-btn");
-  const status = document.getElementById("status");
+  const syncBtn = document.getElementById("sync-vault-btn");
 
   if (data.authenticated) {
-    fetchBtn.textContent = "Sync Library";
-    fetchBtn.classList.add("authenticated");
-    status.textContent = "Connected to Spotify. Click to sync.";
     fetchAlbums();
   } else {
-    fetchBtn.textContent = "Login with Spotify";
-    fetchBtn.classList.remove("authenticated");
-    status.textContent = "Please log in to access your albums.";
+    syncBtn.textContent = "Connect to Sync";
   }
-  return data.authenticated;
 }
 
 async function fetchAlbums() {
-  const status = document.getElementById("status");
   const albumsGrid = document.getElementById("albums-grid");
-  const fetchBtn = document.getElementById("fetch-btn");
-
-  status.textContent = "Synchronizing your collection...";
-  status.style.color = "var(--text-secondary)";
-  fetchBtn.disabled = true;
-  fetchBtn.style.opacity = "0.5";
 
   try {
     const response = await fetch(`/api/albums`);
+    const data = await response.json();
+
+    allAlbums = data.albums || [];
+    updateAlbumCount(allAlbums.length);
+
+    if (allAlbums.length > 0) {
+      populateGenreFilter(allAlbums);
+      applyFilters();
+    } else {
+      albumsGrid.innerHTML =
+        '<div class="empty-state">No records found. Perform a sync.</div>';
+    }
+  } catch (error) {
+    console.error("Archive fetch failed", error);
+  }
+}
+
+async function syncVault() {
+  const syncBtn = document.getElementById("sync-vault-btn");
+
+  const authRes = await fetch("/api/auth/status");
+  const authData = await authRes.json();
+  if (!authData.authenticated) {
+    globalThis.location.href = "/login";
+    return;
+  }
+
+  const originalText = syncBtn.textContent;
+  syncBtn.disabled = true;
+  syncBtn.textContent = "Scanning Archive...";
+
+  try {
+    const response = await fetch("/api/sync");
     const data = await response.json();
 
     if (response.status === 401) {
@@ -39,37 +58,31 @@ async function fetchAlbums() {
       return;
     }
 
-    if (!response.ok) {
-      throw new Error(data.error || "Failed to fetch albums");
-    }
-
-    allAlbums = data.albums;
+    allAlbums = data.albums || [];
+    updateAlbumCount(allAlbums.length);
     populateGenreFilter(allAlbums);
     applyFilters();
-
-    status.textContent = `Library updated: ${allAlbums.length} albums found.`;
-    status.style.color = "var(--accent-color)";
-  } catch (error) {
-    status.textContent = error.message;
-    status.style.color = "#ff4444";
-    albumsGrid.innerHTML =
-      `<div class="empty-state">Unable to sync library. ${error.message}</div>`;
+  } catch (e) {
+    console.error("Sync interrupted", e);
   } finally {
-    fetchBtn.disabled = false;
-    fetchBtn.style.opacity = "1";
+    syncBtn.disabled = false;
+    syncBtn.textContent = originalText;
   }
+}
+
+function updateAlbumCount(count) {
+  const badge = document.getElementById("album-count");
+  if (badge) badge.textContent = count;
 }
 
 function populateGenreFilter(albums) {
   const genreFilter = document.getElementById("genre-filter");
   const genres = new Set();
   albums.forEach((album) => {
-    album.genres.forEach((g) => genres.add(g));
+    if (album.genres) album.genres.forEach((g) => genres.add(g));
   });
 
   const sortedGenres = Array.from(genres).sort();
-
-  // Clear existing except first
   genreFilter.innerHTML = '<option value="all">All Genres</option>';
   sortedGenres.forEach((genre) => {
     const option = document.createElement("option");
@@ -93,9 +106,8 @@ function applyFilters() {
     const albumYear = parseInt(album.year);
     let matchesDecade = true;
     if (decadeFilter !== "all") {
-      if (decadeFilter === "older") {
-        matchesDecade = albumYear < 1970;
-      } else {
+      if (decadeFilter === "older") matchesDecade = albumYear < 1970;
+      else {
         const decadeStart = parseInt(decadeFilter);
         matchesDecade = albumYear >= decadeStart &&
           albumYear < decadeStart + 10;
@@ -103,12 +115,10 @@ function applyFilters() {
     }
 
     const matchesGenre = genreFilter === "all" ||
-      album.genres.includes(genreFilter);
-
+      (album.genres && album.genres.includes(genreFilter));
     return matchesSearch && matchesDecade && matchesGenre;
   });
 
-  // Sort
   filteredAlbums.sort((a, b) => {
     switch (sortSelect) {
       case "date-desc":
@@ -127,13 +137,7 @@ function applyFilters() {
   renderAlbums(filteredAlbums);
 }
 
-document.getElementById("fetch-btn").addEventListener("click", async () => {
-  const auth = await checkAuthStatus();
-  if (!auth) globalThis.location.href = "/login";
-  else fetchAlbums();
-});
-
-// Event listeners for filters
+document.getElementById("sync-vault-btn").addEventListener("click", syncVault);
 document.getElementById("search-input").addEventListener("input", applyFilters);
 document.getElementById("decade-filter").addEventListener(
   "change",
@@ -148,31 +152,32 @@ document.getElementById("sort-select").addEventListener("change", applyFilters);
 function renderAlbums(albums) {
   const albumsGrid = document.getElementById("albums-grid");
   const template = document.getElementById("album-card-template");
-
   albumsGrid.innerHTML = "";
 
   if (albums.length === 0) {
     albumsGrid.innerHTML =
-      '<div class="empty-state">No albums match your filters.</div>';
+      '<div class="empty-state">No matching records.</div>';
     return;
   }
 
-  albums.forEach((album, index) => {
+  albums.forEach((album) => {
     const clone = template.content.cloneNode(true);
     const card = clone.querySelector(".album-card");
-
-    card.style.animationDelay = `${index * 0.02}s`;
-
     const img = clone.querySelector("img");
-    img.src = album.cover || "https://via.placeholder.com/300?text=No+Cover";
-    img.onerror = () => {
-      img.src = "https://via.placeholder.com/300?text=No+Cover";
-    };
 
+    img.src = album.cover || "https://via.placeholder.com/300?text=No+Cover";
     clone.querySelector(".album-name").textContent = album.name;
     clone.querySelector(".album-artist").textContent = album.artist;
     clone.querySelector(".album-year").textContent = album.year;
-    clone.querySelector(".view-link").href = album.link;
+
+    const link = clone.querySelector(".view-link");
+    if (link) link.href = album.link;
+
+    // Use a direct click listener on the card instead of an overlay
+    card.addEventListener("click", () => {
+      globalThis.open(album.link, "_blank");
+    });
+    card.style.cursor = "pointer";
 
     albumsGrid.appendChild(clone);
   });

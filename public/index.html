@@ -3,26 +3,21 @@
   <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Album Vault | My Collection</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link
-      href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap"
-      rel="stylesheet"
-    >
+    <title>My Albums | Spotify Collection</title>
+    <link rel="stylesheet" href="/design-system/css/bundle.min.css">
     <link rel="stylesheet" href="style.css">
   </head>
   <body>
     <div class="background-glow"></div>
 
-    <main class="container">
+    <main class="container is-loaded">
       <header>
         <div class="logo">
-          <span class="icon">💿</span>
-          <h1>My<span>Vault</span></h1>
+          <h1>My albums</h1>
+          <span id="album-count" class="count-badge">0</span>
         </div>
         <p class="subtitle" id="user-context">
-          Your private Spotify collection, synchronized.
+          My collection of albums on Spotify.
         </p>
       </header>
 
@@ -31,7 +26,7 @@
           <input
             type="text"
             id="search-input"
-            placeholder="Search albums or artists..."
+            placeholder="Search archive..."
           >
         </div>
 
@@ -39,7 +34,7 @@
           <div class="filter-group">
             <label>Decade</label>
             <select id="decade-filter">
-              <option value="all">All Decades</option>
+              <option value="all">All</option>
               <option value="2020">2020s</option>
               <option value="2010">2010s</option>
               <option value="2000">2000s</option>
@@ -58,46 +53,48 @@
           </div>
 
           <div class="filter-group">
-            <label>Sort By</label>
+            <label>Order</label>
             <select id="sort-select">
-              <option value="date-desc">Newest First</option>
-              <option value="date-asc">Oldest First</option>
-              <option value="name-asc">Album (A-Z)</option>
-              <option value="artist-asc">Artist (A-Z)</option>
+              <option value="date-desc">Recent</option>
+              <option value="date-asc">Chronological</option>
+              <option value="name-asc">Title</option>
+              <option value="artist-asc">Artist</option>
             </select>
           </div>
         </div>
-
-        <div class="input-group">
-          <button id="fetch-btn">Loading...</button>
-        </div>
-        <div id="status" class="status-message"></div>
       </section>
 
-      <section class="albums-grid" id="albums-grid">
-        <!-- Albums will be injected here -->
+      <section class="project-grid albums-grid" id="albums-grid">
+        <!-- Rendered via script.js -->
         <div class="empty-state">
-          <p>Establishing connection to the vault...</p>
+          <p>Scanning vault...</p>
         </div>
       </section>
+
+      <footer class="sync-footer">
+        <button id="sync-vault-btn" class="footer-btn">
+          Sync collection
+        </button>
+      </footer>
     </main>
 
+    <!-- Templates -->
     <template id="album-card-template">
-      <div class="album-card">
+      <div class="project-card album-card">
         <div class="album-cover">
           <img src="" alt="Album Cover" loading="lazy">
-          <div class="album-overlay">
-            <a href="" target="_blank" class="view-link">View Album</a>
-          </div>
         </div>
         <div class="album-info">
           <h3 class="album-name"></h3>
           <p class="album-artist"></p>
-          <p class="album-year"></p>
+          <span class="album-year"></span>
+          <a href="" target="_blank" class="view-link" style="display: none"
+          >View</a>
         </div>
       </div>
     </template>
 
+    <script src="/design-system/js/bundle.min.js"></script>
     <script src="script.js"></script>
   </body>
 </html>

@@ -13,6 +13,7 @@ const REDIRECT_URI = Deno.env.get("SPOTIFY_REDIRECT_URI") ||
 console.log(`\n🚀 Server started at http://localhost:8888`);
 console.log(`🔗 Spotify Redirect URI: ${REDIRECT_URI}\n`);
 const TOKEN_FILE = "./.refresh_token";
+const CACHE_FILE = "./.albums_cache.json";
 
 interface Album {
   name: string;
@@ -37,9 +38,7 @@ interface SpotifyAlbumItem {
 // Helper to get access token from refresh token
 async function getAccessTokenFromRefresh() {
   if (!(await exists(TOKEN_FILE))) return null;
-
   const refreshToken = await Deno.readTextFile(TOKEN_FILE);
-
   const response = await fetch("https://accounts.spotify.com/api/token", {
     method: "POST",
     headers: {
@@ -51,12 +50,11 @@ async function getAccessTokenFromRefresh() {
       refresh_token: refreshToken,
     }),
   });
-
   const data = await response.json();
   return data.access_token;
 }
 
-// 1. Redirect to Spotify Login (Run this once manually to authorize)
+// 1. Login flow
 app.get("/login", (c) => {
   const scope = "user-library-read";
   const authUrl = new URL("https://accounts.spotify.com/authorize");
@@ -65,14 +63,11 @@ app.get("/login", (c) => {
   authUrl.searchParams.append("scope", scope);
   authUrl.searchParams.append("redirect_uri", REDIRECT_URI);
   authUrl.searchParams.append("show_dialog", "true");
-
   return c.redirect(authUrl.toString());
 });
 
-// 2. Handle Callback and Save Refresh Token
 app.get("/callback", async (c) => {
   const code = c.req.query("code");
-
   const response = await fetch("https://accounts.spotify.com/api/token", {
     method: "POST",
     headers: {
@@ -85,111 +80,127 @@ app.get("/callback", async (c) => {
       redirect_uri: REDIRECT_URI,
     }),
   });
-
   const data = await response.json();
-
   if (data.refresh_token) {
     await Deno.writeTextFile(TOKEN_FILE, data.refresh_token);
-    return c.text(
-      "Logged in! Your albums are now available at /api/albums and will refresh automatically.",
-    );
+    return c.text("Logged in! Go back to the app.");
   }
-
   return c.text("Authentication failed", 400);
 });
 
-// 3. Fetch User's Saved Albums (All Pages with Genres)
-async function fetchUserAlbums(token: string): Promise<Album[]> {
-  let allAlbums: Album[] = [];
-  let nextUrl: string | null = "https://api.spotify.com/v1/me/albums?limit=50";
+// 2. Optimized Sync Logic (50-item check)
+async function syncLibrary(token: string) {
+  const firstPageUrl = "https://api.spotify.com/v1/me/albums?limit=50";
+  const firstRes = await fetch(firstPageUrl, {
+    headers: { "Authorization": `Bearer ${token}` },
+  });
+  if (!firstRes.ok) throw new Error("Spotify error");
+  const firstData = await firstRes.json();
+  const firstBatch = firstData.items || [];
+
+  let cached: Album[] = [];
+  if (await exists(CACHE_FILE)) {
+    cached = JSON.parse(await Deno.readTextFile(CACHE_FILE));
+  }
+
+  // Check if first 50 match
+  const isMatch = cached.length >= firstBatch.length &&
+    firstBatch.every((item: SpotifyAlbumItem, idx: number) =>
+      item.album.external_urls.spotify === cached[idx]?.link
+    );
+
+  if (isMatch && cached.length > 0) {
+    console.log("🚀 Sync: Match found, skipping full download.");
+    return { status: "no_change", count: cached.length };
+  }
+
+  console.log("🔄 Sync: Difference detected, downloading all...");
+  let all: Album[] = [];
+  let nextUrl: string | null = firstPageUrl;
+  let isFirst = true;
 
   while (nextUrl) {
-    console.log(`📡 Fetching page: ${nextUrl}`);
-    const response: Response = await fetch(nextUrl, {
-      headers: { "Authorization": `Bearer ${token}` },
-    });
-
-    if (!response.ok) {
-      console.error(`❌ Failed to fetch page: ${response.statusText}`);
-      break;
+    let data;
+    if (isFirst) {
+      data = firstData;
+      isFirst = false;
+    } else {
+      const resp: Response = await fetch(nextUrl, {
+        headers: { "Authorization": `Bearer ${token}` },
+      });
+      if (!resp.ok) break;
+      data = await resp.json();
     }
-
-    const data = await response.json();
     if (!data.items) break;
 
-    // Collect artist IDs to fetch genres (since albums often have empty genres)
     const artistIds = [
       ...new Set(
-        data.items.map((item: SpotifyAlbumItem) => item.album.artists[0].id),
+        data.items.map((i: SpotifyAlbumItem) => i.album.artists[0].id),
       ),
     ].join(",");
     const genreMap: Record<string, string[]> = {};
-
     if (artistIds) {
-      const artistResponse = await fetch(
+      const artRes = await fetch(
         `https://api.spotify.com/v1/artists?ids=${artistIds}`,
-        {
-          headers: { "Authorization": `Bearer ${token}` },
-        },
+        { headers: { "Authorization": `Bearer ${token}` } },
       );
-      if (artistResponse.ok) {
-        const artistData = await artistResponse.json();
-        artistData.artists.forEach(
-          (artist: { id: string; genres: string[] }) => {
-            genreMap[artist.id] = artist.genres;
-          },
+      if (artRes.ok) {
+        const artData = await artRes.json();
+        artData.artists.forEach((a: { id: string; genres: string[] }) =>
+          genreMap[a.id] = a.genres
         );
       }
     }
 
-    const pageItems = data.items.map((item: SpotifyAlbumItem) => {
-      const primaryArtistId = item.album.artists[0].id;
-      return {
-        name: item.album.name,
-        artist: item.album.artists.map((a) => a.name).join(", "),
-        year: item.album.release_date.split("-")[0],
-        full_date: item.album.release_date,
-        cover: item.album.images[0]?.url || "",
-        link: item.album.external_urls.spotify,
-        genres: genreMap[primaryArtistId] || [],
-      };
-    });
+    const items: Album[] = data.items.map((i: SpotifyAlbumItem) => ({
+      name: i.album.name,
+      artist: i.album.artists.map((a) => a.name).join(", "),
+      year: i.album.release_date.split("-")[0],
+      full_date: i.album.release_date,
+      cover: i.album.images[0]?.url || "",
+      link: i.album.external_urls.spotify,
+      genres: genreMap[i.album.artists[0].id] || [],
+    }));
 
-    allAlbums = [...allAlbums, ...pageItems];
+    all = [...all, ...items];
     nextUrl = data.next;
   }
 
-  console.log(`✅ Total albums fetched: ${allAlbums.length}`);
-  return allAlbums;
+  await Deno.writeTextFile(CACHE_FILE, JSON.stringify(all));
+  return { status: "updated", count: all.length };
 }
 
-// Serve static files
+// Serve design-system static files
+app.use(
+  "/design-system/*",
+  serveStatic({
+    root: "./design-system/dist",
+    rewriteRequestPath: (path) => path.replace(/^\/design-system/, ""),
+  }),
+);
+
+// API Endpoints
 app.use("/*", serveStatic({ root: "./public" }));
 
-// 🚀 API Endpoint (Always returns current albums using background refresh)
+// Cache-only endpoint
 app.get("/api/albums", async (c) => {
-  try {
-    const token = await getAccessTokenFromRefresh();
+  if (!(await exists(CACHE_FILE))) return c.json({ albums: [] });
+  const albums = JSON.parse(await Deno.readTextFile(CACHE_FILE));
+  return c.json({ albums });
+});
 
-    if (!token) {
-      return c.json(
-        { error: "Server not authorized. Visit /login first." },
-        401,
-      );
-    }
-
-    const albums = await fetchUserAlbums(token);
-    return c.json({ albums });
-  } catch (error) {
-    console.error("Spotify API Error:", error);
-    return c.json({ error: "Failed to fetch from Spotify" }, 500);
-  }
+// Explicit Sync endpoint
+app.get("/api/sync", async (c) => {
+  const token = await getAccessTokenFromRefresh();
+  if (!token) return c.json({ error: "Unauthorized" }, 401);
+  const result = await syncLibrary(token);
+  const albums = JSON.parse(await Deno.readTextFile(CACHE_FILE));
+  return c.json({ ...result, albums });
 });
 
 app.get("/api/auth/status", async (c) => {
-  const authorized = await exists(TOKEN_FILE);
-  return c.json({ authenticated: authorized });
+  const auth = await exists(TOKEN_FILE);
+  return c.json({ authenticated: auth });
 });
 
-console.log("Server running on http://localhost:8888");
 Deno.serve({ port: 8888 }, app.fetch);
