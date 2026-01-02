@@ -8,6 +8,9 @@ async function checkAuthStatus() {
 
   if (data.authenticated) {
     fetchAlbums();
+    setTimeout(() => {
+      syncVault();
+    }, 500);
   } else {
     syncBtn.textContent = "Connect to Sync";
   }
@@ -55,6 +58,11 @@ async function syncVault() {
 
     if (response.status === 401) {
       globalThis.location.href = "/login";
+      return;
+    }
+
+    if (data.status === "fresh") {
+      console.log("Collection is up-to-date ✨");
       return;
     }
 
