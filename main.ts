@@ -7,13 +7,15 @@ const app = new Hono();
 
 const CLIENT_ID = Deno.env.get("SPOTIFY_CLIENT_ID");
 const CLIENT_SECRET = Deno.env.get("SPOTIFY_CLIENT_SECRET");
-const REDIRECT_URI = Deno.env.get("SPOTIFY_REDIRECT_URI") ||
-  "http://127.0.0.1:8888/callback";
+const REDIRECT_URI = Deno.env.get("SPOTIFY_REDIRECT_URI");
 
-console.log(`\n🚀 Server started at http://localhost:8888`);
+console.log(
+  `\n🚀 Server started at ${REDIRECT_URI?.replace("/callback", "")}`,
+);
 console.log(`🔗 Spotify Redirect URI: ${REDIRECT_URI}\n`);
-const TOKEN_FILE = "./.refresh_token";
-const CACHE_FILE = "./.albums_cache.json";
+
+const TOKEN_FILE = "./.cache/refresh_token";
+const CACHE_FILE = "./.cache/albums_cache.json";
 
 interface Album {
   name: string;
@@ -206,4 +208,4 @@ app.get("/api/auth/status", async (c) => {
   return c.json({ authenticated: auth });
 });
 
-Deno.serve({ port: 8888 }, app.fetch);
+Deno.serve({ port: 8000 }, app.fetch);

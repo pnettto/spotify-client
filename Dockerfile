@@ -2,15 +2,18 @@ FROM denoland/deno:debian
 
 WORKDIR /app
 
-# Copy configuration files first to resolve dependencies
-COPY deno.json* deno.lock* ./
-COPY main.ts .
+# Not really needed, just to be explicit
+ENV DENO_DIR=/deno-dir
 
-# Cache dependencies
-RUN deno cache main.ts
+COPY deno.json* deno.lock* ./
+RUN --mount=type=cache,target=/deno-dir \
+    deno install --entrypoint deno.json
 
 COPY . .
 
-EXPOSE 8888
+RUN --mount=type=cache,target=/deno-dir \
+    deno cache --reload main.ts
 
-CMD ["run", "--allow-net", "--allow-read", "--allow-env", "main.ts"]
+EXPOSE 8000
+
+CMD ["run", "--allow-net", "--allow-read", "--allow-write=./.cache", "--allow-env", "main.ts"]
