@@ -2,7 +2,7 @@ let allAlbums = [];
 let filteredAlbums = [];
 
 async function checkAuthStatus() {
-  const response = await fetch("/api/auth/status");
+  const response = await fetch("api/auth/status");
   const data = await response.json();
   const syncBtn = document.getElementById("sync-vault-btn");
 
@@ -17,7 +17,7 @@ async function fetchAlbums() {
   const albumsGrid = document.getElementById("albums-grid");
 
   try {
-    const response = await fetch(`/api/albums`);
+    const response = await fetch(`api/albums`);
     const data = await response.json();
 
     allAlbums = data.albums || [];
@@ -38,7 +38,7 @@ async function fetchAlbums() {
 async function syncVault() {
   const syncBtn = document.getElementById("sync-vault-btn");
 
-  const authRes = await fetch("/api/auth/status");
+  const authRes = await fetch("api/auth/status");
   const authData = await authRes.json();
   if (!authData.authenticated) {
     globalThis.location.href = "/login";
@@ -50,7 +50,7 @@ async function syncVault() {
   syncBtn.textContent = "Scanning Archive...";
 
   try {
-    const response = await fetch("/api/sync");
+    const response = await fetch("api/sync");
     const data = await response.json();
 
     if (response.status === 401) {
