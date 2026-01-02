@@ -92,50 +92,62 @@ app.get("/callback", async (c) => {
   return c.text("Authentication failed", 400);
 });
 
-// 2. Optimized Sync Logic (50-item check)
-async function syncLibrary(token: string) {
-  const firstPageUrl = "https://api.spotify.com/v1/me/albums?limit=50";
-  const firstRes = await fetch(firstPageUrl, {
+async function isCacheFresh(token: string) {
+  const apiUrl = "https://api.spotify.com/v1/me/albums?limit=10";
+  const res = await fetch(apiUrl, {
     headers: { "Authorization": `Bearer ${token}` },
   });
-  if (!firstRes.ok) throw new Error("Spotify error");
-  const firstData = await firstRes.json();
-  const firstBatch = firstData.items || [];
+  if (!res.ok) throw new Error("Spotify error");
+  const data = await res.json();
+  const batch = data.items || [];
 
   let cached: Album[] = [];
   if (await exists(CACHE_FILE)) {
     cached = JSON.parse(await Deno.readTextFile(CACHE_FILE));
+  } else {
+    console.log("Cache doesn't exist yet. Aborting...");
+    return false;
   }
 
-  // Check if first 50 match
-  const isMatch = cached.length >= firstBatch.length &&
-    firstBatch.every((item: SpotifyAlbumItem, idx: number) =>
+  // Check if batch matches the cache
+  const isMatch = cached.length >= batch.length &&
+    batch.every((item: SpotifyAlbumItem, idx: number) =>
       item.album.external_urls.spotify === cached[idx]?.link
     );
 
-  if (isMatch && cached.length > 0) {
-    console.log("🚀 Sync: Match found, skipping full download.");
-    return { status: "no_change", count: cached.length };
+  if (isMatch) {
+    console.log("Cache matches the newest entries.");
+  } else {
+    console.log("Cache does not match newest entries, refresh needed.");
   }
 
-  console.log("🔄 Sync: Difference detected, downloading all...");
+  return isMatch;
+}
+
+async function syncLibrary(token: string) {
+  const apiUrl = "https://api.spotify.com/v1/me/albums?limit=50";
+
+  console.log("🔄 Sync: Downloading all...");
   let all: Album[] = [];
-  let nextUrl: string | null = firstPageUrl;
-  let isFirst = true;
+  let nextUrl: string | null = apiUrl;
 
   while (nextUrl) {
-    let data;
-    if (isFirst) {
-      data = firstData;
-      isFirst = false;
-    } else {
-      const resp: Response = await fetch(nextUrl, {
-        headers: { "Authorization": `Bearer ${token}` },
-      });
-      if (!resp.ok) break;
-      data = await resp.json();
+    console.log(`Fetching:`, nextUrl);
+
+    const resp: Response = await fetch(nextUrl, {
+      headers: { "Authorization": `Bearer ${token}` },
+    });
+
+    if (!resp.ok) {
+      console.log("resp not ok");
+      break;
     }
-    if (!data.items) break;
+
+    const data = await resp.json();
+    if (!data.items) {
+      console.log("no data.items");
+      break;
+    }
 
     const artistIds = [
       ...new Set(
@@ -171,7 +183,9 @@ async function syncLibrary(token: string) {
     nextUrl = data.next;
   }
 
+  console.log("Writing to file...");
   await Deno.writeTextFile(CACHE_FILE, JSON.stringify(all));
+
   return { status: "updated", count: all.length };
 }
 
@@ -198,9 +212,16 @@ app.get("/api/albums", async (c) => {
 app.get("/api/sync", async (c) => {
   const token = await getAccessTokenFromRefresh();
   if (!token) return c.json({ error: "Unauthorized" }, 401);
-  const result = await syncLibrary(token);
-  const albums = JSON.parse(await Deno.readTextFile(CACHE_FILE));
-  return c.json({ ...result, albums });
+
+  const isUpToDate = await isCacheFresh(token);
+
+  if (isUpToDate) {
+    return c.json({ status: "fresh" });
+  } else {
+    const result = await syncLibrary(token);
+    const albums = JSON.parse(await Deno.readTextFile(CACHE_FILE));
+    return c.json({ ...result, albums });
+  }
 });
 
 app.get("/api/auth/status", async (c) => {
