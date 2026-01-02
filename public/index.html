@@ -22,15 +22,16 @@
       </header>
 
       <section class="controls-section">
-        <div class="search-container">
-          <input
-            type="text"
-            id="search-input"
-            placeholder="Search archive..."
-          >
-        </div>
-
         <div class="filter-bar">
+          <div class="filter-group search-container">
+            <label>Search</label>
+            <input
+              type="text"
+              id="search-input"
+              placeholder="Search archive..."
+            >
+          </div>
+
           <div class="filter-group">
             <label>Decade</label>
             <select id="decade-filter">
@@ -55,7 +56,7 @@
           <div class="filter-group">
             <label>Order</label>
             <select id="sort-select">
-              <option value="none">Recently added</option>
+              <option value="none">Recently played</option>
               <option value="date-asc">Chronological</option>
               <option value="name-asc">Title</option>
               <option value="artist-asc">Artist</option>
@@ -100,7 +101,6 @@
       </div>
     </template>
 
-    <script src="/design-system/js/bundle.min.js"></script>
     <script src="script.js"></script>
   </body>
 </html>

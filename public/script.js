@@ -101,7 +101,10 @@ function applyFilters() {
 
   filteredAlbums = allAlbums.filter((album) => {
     const matchesSearch = album.name.toLowerCase().includes(searchQuery) ||
-      album.artist.toLowerCase().includes(searchQuery);
+      album.artist.toLowerCase().includes(searchQuery) ||
+      album.genres.some((genre) =>
+        genre.toLowerCase().includes(searchQuery.toLowerCase())
+      );
 
     const albumYear = parseInt(album.year);
     let matchesDecade = true;

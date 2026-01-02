@@ -50,25 +50,7 @@ header {
 
 /* Controls */
 .controls-section {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-lg);
-  margin-bottom: var(--sp-3xl);
-}
-
-.search-container input {
-  width: 100%;
-  max-width: 500px;
-  background: var(--bg-alt);
-  border: 1px solid var(--border);
-  padding: var(--sp-sm) var(--sp-md);
-  border-radius: var(--radius);
-  color: var(--text);
-  outline: none;
-}
-
-.search-container input:focus {
-  border-color: var(--accent);
+  margin-bottom: var(--sp-2xl);
 }
 
 .filter-bar {
@@ -91,7 +73,9 @@ header {
   font-weight: bold;
 }
 
-.filter-group select {
+.filter-group select,
+.filter-group input
+ {
   background: var(--bg-alt);
   border: 1px solid var(--border);
   padding: 6px 12px;
@@ -99,6 +83,12 @@ header {
   color: var(--text);
   outline: none;
   cursor: pointer;
+}
+
+.filter-group input
+ {
+    min-width: 20rem;
+    cursor: text;
 }
 
 /* Album Card Overrides to match pnetto.com/work style */
