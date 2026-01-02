@@ -121,8 +121,8 @@ function applyFilters() {
 
   filteredAlbums.sort((a, b) => {
     switch (sortSelect) {
-      case "date-desc":
-        return new Date(b.full_date) - new Date(a.full_date);
+      case "none":
+        return a;
       case "date-asc":
         return new Date(a.full_date) - new Date(b.full_date);
       case "name-asc":
@@ -169,20 +169,32 @@ function renderAlbums(albums) {
     clone.querySelector(".album-name").textContent = album.name;
     clone.querySelector(".album-artist").textContent = album.artist;
     clone.querySelector(".album-year").textContent = album.year;
+    clone.querySelector(".genre-list").textContent = album.genres.length > 0
+      ? album.genres.join(", ")
+      : "No words could ever describe this 🦄";
 
     const link = clone.querySelector(".view-link");
     if (link) link.href = album.link;
 
     // Use a direct click listener on the card instead of an overlay
-    card.addEventListener("click", () => {
-      const spotifyUri = album.uri ||
-        album.link.replace("https://open.spotify.com/", "spotify:").replace(
-          /\//g,
-          ":",
-        );
-      globalThis.location.href = spotifyUri;
+    card.addEventListener("click", (e) => {
+      if (e.target.matches(".genre-toggle")) {
+        e.preventDefault();
+        card
+          .querySelector(".genre-list")
+          .classList.toggle("is-visible");
+        return;
+      }
+
+      if (e.target.matches("img")) {
+        const spotifyUri = album.uri ||
+          album.link.replace("https://open.spotify.com/", "spotify:").replace(
+            /\//g,
+            ":",
+          );
+        globalThis.location.href = spotifyUri;
+      }
     });
-    card.style.cursor = "pointer";
 
     albumsGrid.appendChild(clone);
   });

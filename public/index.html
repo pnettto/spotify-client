@@ -55,7 +55,7 @@
           <div class="filter-group">
             <label>Order</label>
             <select id="sort-select">
-              <option value="date-desc">Recent</option>
+              <option value="none">Recently added</option>
               <option value="date-asc">Chronological</option>
               <option value="name-asc">Title</option>
               <option value="artist-asc">Artist</option>
@@ -87,7 +87,13 @@
         <div class="album-info">
           <h3 class="album-name"></h3>
           <p class="album-artist"></p>
-          <span class="album-year"></span>
+
+          <div class="album-meta-row">
+            <span class="album-year"></span>
+            <a href="#" class="genre-toggle">genres</a>
+          </div>
+          <div class="genre-list"></div>
+
           <a href="" target="_blank" class="view-link" style="display: none"
           >View</a>
         </div>

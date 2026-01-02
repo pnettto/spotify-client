@@ -131,11 +131,31 @@ header {
   color: var(--text) !important;
 }
 
+.album-meta-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: var(--fs-xs) !important;
+}
+
 .album-year {
   margin: 8px 0 0 0 !important;
-  font-size: var(--fs-xs) !important;
   color: var(--text-muted) !important;
   display: block;
+}
+
+.genre-toggle {
+    border: 0;
+    line-height: 2;
+}
+
+.genre-list {
+    display: none;
+}
+
+.genre-list.is-visible {
+    display: block;
+    padding-top: 1rem;
+    font-size: var(--fs-xs) !important;
 }
 
 .album-overlay {
@@ -173,6 +193,9 @@ header {
   color: var(--text-muted);
 }
 
+.album-cover {
+    cursor: pointer;
+}
 
 .album-cover img {
     border-radius: 0;
