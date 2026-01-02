@@ -140,6 +140,8 @@ function applyFilters() {
         return a.name.localeCompare(b.name);
       case "artist-asc":
         return a.artist.localeCompare(b.artist);
+      case "popularity":
+        return b.popularity - a.popularity;
       default:
         return 0;
     }

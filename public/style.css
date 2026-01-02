@@ -148,6 +148,12 @@ header {
     font-size: var(--fs-xs) !important;
 }
 
+@media (min-width: 600px) {
+    .albums-grid {
+        grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+    }
+}
+
 .album-overlay {
   display: none; /* We prefer the clean look */
 }

@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { serveStatic } from "hono/deno";
 import "@std/dotenv/load";
 import { exists } from "@std/fs/exists";
+import { MockCallHistoryLog } from "asset:///node/undici/mock-call-history.d.ts";
 
 const app = new Hono();
 
@@ -36,6 +37,7 @@ interface SpotifyAlbumItem {
     images: { url: string }[];
     external_urls: { spotify: string };
     uri: string;
+    popularity: number;
   };
 }
 
@@ -177,6 +179,7 @@ async function syncLibrary(token: string) {
       link: i.album.external_urls.spotify,
       uri: i.album.uri,
       genres: genreMap[i.album.artists[0].id] || [],
+      popularity: i.album.popularity || 0,
     }));
 
     all = [...all, ...items];
@@ -210,12 +213,13 @@ app.get("/api/albums", async (c) => {
 
 // Explicit Sync endpoint
 app.get("/api/sync", async (c) => {
+  const forceSync = c.req.query("force") !== undefined;
   const token = await getAccessTokenFromRefresh();
   if (!token) return c.json({ error: "Unauthorized" }, 401);
 
   const isUpToDate = await isCacheFresh(token);
 
-  if (isUpToDate) {
+  if (isUpToDate && !forceSync) {
     return c.json({ status: "fresh" });
   } else {
     const result = await syncLibrary(token);
