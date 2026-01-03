@@ -2,7 +2,6 @@ import { Hono } from "hono";
 import { serveStatic } from "hono/deno";
 import "@std/dotenv/load";
 import { exists } from "@std/fs/exists";
-import { MockCallHistoryLog } from "asset:///node/undici/mock-call-history.d.ts";
 
 const app = new Hono();
 
@@ -60,7 +59,6 @@ async function getAccessTokenFromRefresh() {
   return data.access_token;
 }
 
-// 1. Login flow
 app.get("/login", (c) => {
   const scope = "user-library-read";
   const authUrl = new URL("https://accounts.spotify.com/authorize");
@@ -126,6 +124,43 @@ async function isCacheFresh(token: string) {
   return isMatch;
 }
 
+async function checkPartialCache(
+  items: Album[],
+): Promise<[Album[] | null, string | null]> {
+  console.log("Check if there is a sequence of 5 repeated albums");
+  try {
+    const cached = JSON.parse(await Deno.readTextFile(CACHE_FILE));
+    const MATCH_THRESHOLD = 5;
+    const MAX_NEW_ITEMS = 45; // items.length is 50, leave buffer for match window
+
+    // Batch size is 50
+    for (let i = 0; i < MAX_NEW_ITEMS; i++) {
+      const testBatch = items.slice(i, i + MATCH_THRESHOLD);
+      const hasMatch = testBatch.every((testItem: Album, idx) => {
+        return testItem.uri === cached[idx]?.uri;
+      });
+
+      if (hasMatch) {
+        console.log(
+          `Cache hit at position ${i}, doing incremental update`,
+        );
+        const newItems = items.slice(0, i);
+        const newUris = new Set(newItems.map((i) => i.uri));
+        const deduplicatedCache = cached.filter((ci: Album) =>
+          !newUris.has(ci.uri)
+        );
+        const finalItems = [...newItems, ...deduplicatedCache];
+
+        return [finalItems, null];
+      }
+    }
+
+    return [null, "No partial cache sequence found"];
+  } catch (e) {
+    return [null, `Cache check failed: ${e instanceof Error ? e.message : e}`];
+  }
+}
+
 async function syncLibrary(token: string) {
   const apiUrl = "https://api.spotify.com/v1/me/albums?limit=50";
 
@@ -182,6 +217,17 @@ async function syncLibrary(token: string) {
       popularity: i.album.popularity || 0,
     }));
 
+    // Only check the first page
+    if (all.length === 0) {
+      const [updated, err] = await checkPartialCache(items);
+      if (updated) {
+        all = updated;
+        break; // from while loop
+      } else {
+        console.log(`Partial cache check error: ${err}`);
+      }
+    }
+
     all = [...all, ...items];
     nextUrl = data.next;
   }
@@ -192,16 +238,7 @@ async function syncLibrary(token: string) {
   return { status: "updated", count: all.length };
 }
 
-// Serve design-system static files
-app.use(
-  "/design-system/*",
-  serveStatic({
-    root: "./design-system/dist",
-    rewriteRequestPath: (path) => path.replace(/^\/design-system/, ""),
-  }),
-);
-
-// API Endpoints
+// Frontend
 app.use("/*", serveStatic({ root: "./public" }));
 
 // Cache-only endpoint
@@ -211,7 +248,7 @@ app.get("/api/albums", async (c) => {
   return c.json({ albums });
 });
 
-// Explicit Sync endpoint
+// Sync endpoint
 app.get("/api/sync", async (c) => {
   const forceSync = c.req.query("force") !== undefined;
   const token = await getAccessTokenFromRefresh();
