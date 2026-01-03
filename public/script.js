@@ -222,6 +222,7 @@ function renderAlbums(albums) {
   if (albums.length === 0) {
     albumsGrid.innerHTML =
       '<div class="empty-state">No matching records.</div>';
+    updateAlbumCount(0);
     return;
   }
 
@@ -264,8 +265,7 @@ function renderAlbums(albums) {
     albumsGrid.appendChild(clone);
   });
 
-  const badge = document.getElementById("album-count");
-  badge.innerHTML = albums.length;
+  updateAlbumCount(albums.length);
 }
 
 initializeFromUrlParams();
