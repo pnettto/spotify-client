@@ -135,10 +135,24 @@ function applyFilters() {
   const sortSelect = document.getElementById("sort-select").value;
 
   filteredAlbums = allAlbums.filter((album) => {
-    const matchesSearch = album.name.toLowerCase().includes(searchQuery) ||
-      album.artist.toLowerCase().includes(searchQuery) ||
+    let searchPattern = searchQuery.toLowerCase();
+    // Make appostrophes optional
+    searchPattern = searchPattern
+      .replace(/'/gi, "");
+    // Replace base vowels
+    searchPattern = searchPattern
+      .replace(/a/gi, "[aàáâãäåæāăąǎǟǡǻȁȃȧ]")
+      .replace(/e/gi, "[eèéêëēĕėęěȅȇȩ]")
+      .replace(/i/gi, "[iìíîïĩīĭįǐȉȋ]")
+      .replace(/o/gi, "[oòóôõöøōŏőœơǒǫǭȍȏȫȭȯȱ]")
+      .replace(/u/gi, "[uùúûüũūŭůűųưǔǖǘǚǜȕȗ]");
+    const searchRegex = new RegExp(searchPattern, "i");
+    const matchesSearch =
+      searchRegex.test(album.name.toLowerCase().replace(/'/gi, "")) ||
+      searchRegex.test(album.artist.toLowerCase().replace(/'/gi, "")) ||
+      searchRegex.test(album.year.toLowerCase().replace(/'/gi, "")) ||
       album.genres.some((genre) =>
-        genre.toLowerCase().includes(searchQuery.toLowerCase())
+        searchRegex.test(genre.toLowerCase().replace(/'/gi, ""))
       );
 
     const albumYear = parseInt(album.year);
@@ -177,8 +191,19 @@ function applyFilters() {
   renderAlbums(filteredAlbums);
 }
 
+let searchTimeout;
+function debouncedApplyFilters() {
+  clearTimeout(searchTimeout);
+  searchTimeout = setTimeout(() => {
+    applyFilters();
+  }, 500);
+}
+
 document.getElementById("sync-vault-btn").addEventListener("click", syncVault);
-document.getElementById("search-input").addEventListener("input", applyFilters);
+document.getElementById("search-input").addEventListener(
+  "input",
+  debouncedApplyFilters,
+);
 document.getElementById("decade-filter").addEventListener(
   "change",
   applyFilters,
@@ -238,6 +263,9 @@ function renderAlbums(albums) {
 
     albumsGrid.appendChild(clone);
   });
+
+  const badge = document.getElementById("album-count");
+  badge.innerHTML = albums.length;
 }
 
 initializeFromUrlParams();

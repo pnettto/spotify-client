@@ -32,6 +32,7 @@ header {
 }
 
 .count-badge {
+  flex-shrink: 0;
   background: var(--bg-alt);
   color: var(--accent);
   border: 1px solid var(--border);
