@@ -1,6 +1,16 @@
 let allAlbums = [];
 let filteredAlbums = [];
 
+function initializeFromUrlParams() {
+  const urlParams = new URLSearchParams(globalThis.location.search);
+
+  // Set search input
+  const search = urlParams.get("search");
+  if (search) {
+    document.getElementById("search-input").value = search;
+  }
+}
+
 async function checkAuthStatus() {
   const response = await fetch("api/auth/status");
   const data = await response.json();
@@ -230,4 +240,5 @@ function renderAlbums(albums) {
   });
 }
 
+initializeFromUrlParams();
 checkAuthStatus();
