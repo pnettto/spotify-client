@@ -1,180 +1,274 @@
+/**
+ * State Management
+ */
 let allAlbums = [];
-let filteredAlbums = [];
+let allPlaylists = [];
+let historyCursor = null;
+let isSyncing = false;
+let searchTimeout;
 
-function initializeFromUrlParams() {
+/**
+ * App Initialization & Routing
+ */
+function init() {
   const urlParams = new URLSearchParams(globalThis.location.search);
-
-  // Set search input
   const search = urlParams.get("search");
+
   if (search) {
-    document.getElementById("search-input").value = search;
+    const searchInput = document.getElementById("search-input");
+    if (searchInput) searchInput.value = search;
   }
+
+  // Handle URL Hash-based routing
+  const route = () => {
+    const hash = globalThis.location.hash.replace("#", "");
+    const [page, id] = hash.split("/");
+    const validPages = ["albums", "playlists", "history"];
+    const pageId = validPages.includes(page) ? page : "albums";
+
+    switchPage(pageId, false);
+
+    // Special handling for deep links after view switch
+    if (pageId === "albums" && id) renderFilteredAlbums();
+    if (pageId === "playlists" && id) checkAndShowPlaylist(id);
+  };
+
+  globalThis.addEventListener("popstate", route);
+  route();
+  checkAuthStatus();
 }
 
 async function checkAuthStatus() {
-  const response = await fetch("api/auth/status");
-  const data = await response.json();
-  const syncBtn = document.getElementById("sync-vault-btn");
+  try {
+    const res = await fetch("api/auth/status");
+    const { authenticated } = await res.json();
+    const syncBtn = document.getElementById("sync-vault-btn");
 
-  if (data.authenticated) {
-    fetchAlbums();
-    setTimeout(() => {
-      syncVault();
-    }, 500);
-  } else {
-    syncBtn.textContent = "Connect to Sync";
+    if (authenticated) {
+      fetchAllData();
+      // Auto-sync after load
+      setTimeout(syncVault, 500);
+    } else {
+      syncBtn.textContent = "Connect to Sync";
+      syncBtn.onclick = () => (globalThis.location.href = "/login");
+    }
+  } catch (e) {
+    console.error("Auth check failed", e);
   }
 }
 
+function fetchAllData() {
+  fetchAlbums();
+  fetchPlaylists();
+  fetchHistory();
+}
+
+/**
+ * Navigation
+ */
+function switchPage(pageId, updateHistory = true) {
+  // Update UI State
+  document.querySelectorAll(".page-view").forEach((v) =>
+    v.classList.remove("active")
+  );
+  document.querySelectorAll(".nav-link").forEach((l) =>
+    l.classList.remove("active")
+  );
+
+  const targetView = document.getElementById(`${pageId}-view`);
+  const targetLink = document.querySelector(`.nav-link[data-page="${pageId}"]`);
+
+  if (targetView) targetView.classList.add("active");
+  if (targetLink) targetLink.classList.add("active");
+
+  if (updateHistory) {
+    globalThis.history.pushState(null, "", `#${pageId}`);
+  }
+
+  // Page Specific Logic
+  if (pageId === "history") resetAndFetchHistory();
+  if (pageId === "playlists") {
+    const [_, id] = globalThis.location.hash.replace("#", "").split("/");
+    if (!id) showPlaylistIndex();
+  }
+}
+
+function showPlaylistIndex() {
+  document.getElementById("playlist-index").style.display = "block";
+  document.getElementById("playlist-detail").style.display = "none";
+}
+
+/**
+ * API Fetching
+ */
 async function fetchAlbums() {
-  const albumsGrid = document.getElementById("albums-grid");
-
   try {
-    const response = await fetch(`api/albums`);
-    const data = await response.json();
-
+    const res = await fetch("api/albums");
+    const data = await res.json();
     allAlbums = data.albums || [];
-    updateAlbumCount(allAlbums.length);
 
     if (allAlbums.length > 0) {
       populateGenreFilter(allAlbums);
-      applyFilters();
+      renderFilteredAlbums();
     } else {
-      albumsGrid.innerHTML =
+      document.getElementById("albums-grid").innerHTML =
         '<div class="empty-state">No records found. Perform a sync.</div>';
     }
-  } catch (error) {
-    console.error("Archive fetch failed", error);
+  } catch (e) {
+    console.error("Album fetch failed", e);
   }
 }
 
-let isSyncing = false;
-
 async function syncVault() {
+  if (isSyncing) return;
+
   const syncBtn = document.getElementById("sync-vault-btn");
   const syncStatus = document.getElementById("sync-status");
 
-  const authRes = await fetch("api/auth/status");
-  const authData = await authRes.json();
-  if (!authData.authenticated) {
-    globalThis.location.href = "/login";
-    return;
-  }
-
-  const originalText = syncBtn.textContent;
+  isSyncing = true;
   syncBtn.disabled = true;
   syncBtn.textContent = "Scanning Archive...";
-
-  isSyncing = true;
   syncStatus.style.display = "flex";
 
   try {
-    const response = await fetch("api/sync");
-    const data = await response.json();
+    const res = await fetch("api/sync");
+    if (res.status === 401) return (globalThis.location.href = "/login");
 
-    if (response.status === 401) {
-      globalThis.location.href = "/login";
-      return;
+    const data = await res.json();
+    if (data.status !== "fresh") {
+      allAlbums = data.albums || [];
+      populateGenreFilter(allAlbums);
+      renderFilteredAlbums();
     }
-
-    if (data.status === "fresh") {
-      console.log("Collection is up-to-date ✨");
-      return;
-    }
-
-    allAlbums = data.albums || [];
-    updateAlbumCount(allAlbums.length);
-    populateGenreFilter(allAlbums);
-    applyFilters();
   } catch (e) {
-    console.error("Sync interrupted", e);
+    console.error("Sync failed", e);
   } finally {
     isSyncing = false;
     syncStatus.style.display = "none";
     syncBtn.disabled = false;
-    syncBtn.textContent = originalText;
+    syncBtn.textContent = "Sync collection";
   }
 }
 
-// Warn user before leaving during sync
-globalThis.addEventListener("beforeunload", (e) => {
-  if (isSyncing) {
-    e.preventDefault();
-    e.returnValue = "";
-    return "";
+async function fetchPlaylists() {
+  try {
+    const res = await fetch("api/playlists");
+    const { items = [] } = await res.json();
+    allPlaylists = items;
+    renderPlaylists(items);
+
+    // Check if we need to deep link into a playlist
+    const [page, id] = globalThis.location.hash.replace("#", "").split("/");
+    if (page === "playlists" && id) checkAndShowPlaylist(id);
+  } catch (e) {
+    console.error("Playlists failed", e);
   }
-});
-
-function updateAlbumCount(count) {
-  const badge = document.getElementById("album-count");
-  if (badge) badge.textContent = count;
 }
 
-function populateGenreFilter(albums) {
-  const genreFilter = document.getElementById("genre-filter");
-  const genres = new Set();
-  albums.forEach((album) => {
-    if (album.genres) album.genres.forEach((g) => genres.add(g));
-  });
-
-  const sortedGenres = Array.from(genres).sort();
-  genreFilter.innerHTML = '<option value="all">All Genres</option>';
-  sortedGenres.forEach((genre) => {
-    const option = document.createElement("option");
-    option.value = genre;
-    option.textContent = genre.charAt(0).toUpperCase() + genre.slice(1);
-    genreFilter.appendChild(option);
-  });
+function checkAndShowPlaylist(id) {
+  const playlist = allPlaylists.find((p) => p.id === id || p.uri === id);
+  if (playlist) fetchPlaylistTracks(playlist);
 }
 
-function applyFilters() {
-  const searchQuery = document.getElementById("search-input").value
-    .toLowerCase();
-  const decadeFilter = document.getElementById("decade-filter").value;
-  const genreFilter = document.getElementById("genre-filter").value;
-  const sortSelect = document.getElementById("sort-select").value;
+async function fetchPlaylistTracks(playlist) {
+  document.getElementById("playlist-index").style.display = "none";
+  document.getElementById("playlist-detail").style.display = "block";
+  document.getElementById("current-playlist-name").textContent = playlist.name;
 
-  filteredAlbums = allAlbums.filter((album) => {
-    let searchPattern = searchQuery.toLowerCase();
-    // Make appostrophes optional
-    searchPattern = searchPattern
-      .replace(/'/gi, "");
-    // Replace base vowels
+  const container = document.getElementById("playlist-tracks");
+  container.innerHTML = '<div class="empty-state">Loading tracks...</div>';
+
+  try {
+    const res = await fetch(`api/playlists/${playlist.id}/tracks`);
+    const { items = [] } = await res.json();
+    renderTracks(container, items.map((i) => i.track), { isGrid: true });
+  } catch (e) {
+    console.error("Tracks failed", e);
+  }
+}
+
+async function fetchHistory() {
+  const container = document.getElementById("history-list");
+  const loadMoreBtn = document.getElementById("load-more-history");
+
+  try {
+    const url = new URL("api/history", globalThis.location.origin);
+    url.searchParams.append("limit", "50");
+    if (historyCursor) url.searchParams.append("cursor", historyCursor);
+
+    const res = await fetch(url);
+    const { history = [], nextCursor } = await res.json();
+
+    historyCursor = nextCursor;
+    renderTracks(container, history, {
+      isGrid: true,
+      isHistory: true,
+      append: true,
+    });
+    loadMoreBtn.style.display = historyCursor ? "block" : "none";
+  } catch (e) {
+    console.error("History failed", e);
+  }
+}
+
+function resetAndFetchHistory() {
+  historyCursor = null;
+  document.getElementById("history-list").innerHTML = "";
+  fetchHistory();
+}
+
+/**
+ * UI Rendering & Helpers
+ */
+function renderFilteredAlbums() {
+  const query = document.getElementById("search-input").value.toLowerCase();
+  const decade = document.getElementById("decade-filter").value;
+  const genre = document.getElementById("genre-filter").value;
+  const sort = document.getElementById("sort-select").value;
+
+  const filtered = allAlbums.filter((album) => {
+    // Deep link override: if URL has an ID, only show that album
+    const [page, targetId] = globalThis.location.hash.replace("#", "").split(
+      "/",
+    );
+    if (page === "albums" && targetId) {
+      return album.id === targetId || album.uri === targetId;
+    }
+
+    let searchPattern = query.toLowerCase().replace(/'/gi, "");
     searchPattern = searchPattern
       .replace(/a/gi, "[aàáâãäåæāăąǎǟǡǻȁȃȧ]")
       .replace(/e/gi, "[eèéêëēĕėęěȅȇȩ]")
       .replace(/i/gi, "[iìíîïĩīĭįǐȉȋ]")
       .replace(/o/gi, "[oòóôõöøōŏőœơǒǫǭȍȏȫȭȯȱ]")
       .replace(/u/gi, "[uùúûüũūŭůűųưǔǖǘǚǜȕȗ]");
+
     const searchRegex = new RegExp(searchPattern, "i");
-    const matchesSearch =
+    const matchesSearch = !query ||
       searchRegex.test(album.name.toLowerCase().replace(/'/gi, "")) ||
       searchRegex.test(album.artist.toLowerCase().replace(/'/gi, "")) ||
       searchRegex.test(album.year.toLowerCase().replace(/'/gi, "")) ||
-      album.genres.some((genre) =>
-        searchRegex.test(genre.toLowerCase().replace(/'/gi, ""))
-      );
+      (album.genres &&
+        album.genres.some((g) =>
+          searchRegex.test(g.toLowerCase().replace(/'/gi, ""))
+        ));
 
-    const albumYear = parseInt(album.year);
     let matchesDecade = true;
-    if (decadeFilter !== "all") {
-      if (decadeFilter === "older") matchesDecade = albumYear < 1970;
-      else {
-        const decadeStart = parseInt(decadeFilter);
-        matchesDecade = albumYear >= decadeStart &&
-          albumYear < decadeStart + 10;
-      }
+    if (decade !== "all") {
+      const year = parseInt(album.year);
+      if (decade === "older") matchesDecade = year < 1970;
+      else {matchesDecade = year >= parseInt(decade) &&
+          year < parseInt(decade) + 10;}
     }
 
-    const matchesGenre = genreFilter === "all" ||
-      (album.genres && album.genres.includes(genreFilter));
+    const matchesGenre = genre === "all" ||
+      (album.genres && album.genres.includes(genre));
+
     return matchesSearch && matchesDecade && matchesGenre;
   });
 
-  filteredAlbums.sort((a, b) => {
-    switch (sortSelect) {
-      case "none":
-        return a;
+  filtered.sort((a, b) => {
+    switch (sort) {
       case "date-asc":
         return new Date(a.full_date) - new Date(b.full_date);
       case "name-asc":
@@ -188,116 +282,166 @@ function applyFilters() {
     }
   });
 
-  renderAlbums(filteredAlbums);
+  renderTracks(document.getElementById("albums-grid"), filtered, {
+    isAlbum: true,
+  });
+  document.getElementById("album-count").textContent = filtered.length;
 }
 
-let searchTimeout;
-function debouncedApplyFilters() {
-  clearTimeout(searchTimeout);
-  searchTimeout = setTimeout(() => {
-    applyFilters();
-  }, 500);
+function renderPlaylists(items) {
+  const grid = document.getElementById("playlists-grid");
+  const template = document.getElementById("playlist-card-template");
+  grid.innerHTML = "";
+
+  items.forEach((playlist) => {
+    const clone = template.content.cloneNode(true);
+    clone.querySelector("img").src = playlist.images?.[0]?.url || "";
+    clone.querySelector(".playlist-name").textContent = playlist.name;
+    clone.querySelector(".playlist-card").onclick = () => {
+      globalThis.location.hash = `playlists/${playlist.id}`;
+      fetchPlaylistTracks(playlist);
+    };
+    grid.appendChild(clone);
+  });
 }
 
-document.getElementById("sync-vault-btn").addEventListener("click", syncVault);
-document.getElementById("search-input").addEventListener(
-  "input",
-  debouncedApplyFilters,
-);
-document.getElementById("decade-filter").addEventListener(
-  "change",
-  applyFilters,
-);
-document.getElementById("genre-filter").addEventListener(
-  "change",
-  applyFilters,
-);
-document.getElementById("sort-select").addEventListener("change", applyFilters);
+function renderTracks(container, tracks, options = {}) {
+  const { isGrid = false, isHistory = false, append = false, isAlbum = false } =
+    options;
+  if (!append) container.innerHTML = "";
 
-function renderAlbums(albums) {
-  const albumsGrid = document.getElementById("albums-grid");
   const template = document.getElementById("album-card-template");
-  albumsGrid.innerHTML = "";
 
-  if (albums.length === 0) {
-    albumsGrid.innerHTML =
-      '<div class="empty-state">No matching records.</div>';
-    updateAlbumCount(0);
-    return;
-  }
-
-  albums.forEach((album) => {
+  tracks.forEach((track) => {
+    if (!track) return;
     const clone = template.content.cloneNode(true);
     const card = clone.querySelector(".album-card");
     const img = clone.querySelector("img");
 
-    img.src = album.cover || "https://via.placeholder.com/300?text=No+Cover";
-    clone.querySelector(".album-name").textContent = album.name;
-    clone.querySelector(".album-artist").textContent = album.artist;
-    clone.querySelector(".album-year").textContent = album.year;
-    clone.querySelector(".genre-list").textContent = album.genres.length > 0
-      ? album.genres.join(", ")
-      : "No words could ever describe this 🦄";
+    img.src = track.cover || track.album?.images?.[0]?.url ||
+      "https://via.placeholder.com/300?text=No+Cover";
+    clone.querySelector(".album-name").textContent = track.name;
 
-    const link = clone.querySelector(".view-link");
-    if (link) link.href = album.link;
+    let sub = track.artist || track.artists?.map((a) => a.name).join(", ");
+    if (isHistory && track.timestamp) sub += ` • ${timeAgo(track.timestamp)}`;
+    clone.querySelector(".album-artist").textContent = sub;
 
-    // Use a direct click listener on the card instead of an overlay
-    card.addEventListener("click", (e) => {
-      if (e.target.matches(".genre-toggle")) {
-        e.preventDefault();
-        card
-          .querySelector(".genre-list")
-          .classList.toggle("is-visible");
-        return;
-      }
+    if (isAlbum) {
+      clone.querySelector(".album-year").textContent = track.year;
+      clone.querySelector(".genre-list").textContent =
+        track.genres?.join(", ") || "Experimental 🦄";
 
-      if (e.target.matches("img")) {
-        const spotifyUri = album.uri ||
-          album.link.replace("https://open.spotify.com/", "spotify:").replace(
-            /\//g,
-            ":",
-          );
-        globalThis.location.href = spotifyUri;
-      }
-    });
+      card.onclick = (e) => {
+        if (e.target.matches(".genre-toggle")) {
+          e.preventDefault();
+          card.querySelector(".genre-list").classList.toggle("is-visible");
+        } else if (e.target.matches("img")) {
+          openInSpotify(track.uri || track.link);
+        }
+      };
+    } else {
+      clone.querySelector(".album-meta-row")?.remove();
+      card.onclick = () =>
+        openInSpotify(track.link || track.uri || track.external_urls?.spotify);
+    }
 
-    albumsGrid.appendChild(clone);
+    container.appendChild(clone);
   });
-
-  updateAlbumCount(albums.length);
 }
 
+function openInSpotify(link) {
+  if (!link) return;
+  let uri = link;
+  if (link.startsWith("http")) {
+    uri = link.replace("https://open.spotify.com/", "spotify:").replace(
+      /\//g,
+      ":",
+    );
+  } else if (!link.startsWith("spotify:")) {
+    uri = `spotify:track:${link}`;
+  }
+  globalThis.location.href = uri;
+}
+
+function timeAgo(ts) {
+  const diff = Date.now() - ts;
+  const mins = Math.max(1, Math.floor(diff / 60000));
+  const hrs = Math.floor(mins / 60);
+  const days = Math.floor(hrs / 24);
+
+  if (days > 0) return `${days}d ago`;
+  if (hrs > 0) return `${hrs}h ago`;
+  return `${mins}m ago`;
+}
+
+function populateGenreFilter(albums) {
+  const select = document.getElementById("genre-filter");
+  const genres = [...new Set(albums.flatMap((a) => a.genres || []))].sort();
+  select.innerHTML = '<option value="all">All Genres</option>' +
+    genres.map((g) =>
+      `<option value="${g}">${g.charAt(0).toUpperCase() + g.slice(1)}</option>`
+    ).join("");
+}
+
+/**
+ * Event Listeners
+ */
+document.querySelectorAll(".nav-link").forEach((l) => {
+  l.onclick = (e) => {
+    e.preventDefault();
+    const page = e.currentTarget.dataset.page;
+    if (page) switchPage(page);
+  };
+});
+document.getElementById("back-to-playlists").onclick = showPlaylistIndex;
+document.getElementById("load-more-history").onclick = fetchHistory;
+
+const filterInputs = [
+  "search-input",
+  "decade-filter",
+  "genre-filter",
+  "sort-select",
+];
+filterInputs.forEach((id) => {
+  document.getElementById(id).onchange = renderFilteredAlbums;
+  if (id === "search-input") {
+    document.getElementById(id).oninput = () => {
+      clearTimeout(searchTimeout);
+      searchTimeout = setTimeout(renderFilteredAlbums, 300);
+    };
+  }
+});
+
+globalThis.addEventListener("beforeunload", (e) => {
+  if (isSyncing) {
+    e.preventDefault();
+    return (e.returnValue = "");
+  }
+});
+
+/**
+ * Now Playing Loop
+ */
 async function updateNowPlaying() {
   const banner = document.getElementById("now-playing");
-  if (!banner) return;
-
   try {
-    const response = await fetch("api/now-playing");
-    const data = await response.json();
+    const res = await fetch("api/now-playing");
+    const data = await res.json();
 
     if (data.playing) {
-      const cover = document.getElementById("now-playing-cover");
-      const name = document.getElementById("now-playing-name");
-      const artist = document.getElementById("now-playing-artist");
-
-      if (cover) cover.src = data.cover;
-      if (name) name.textContent = data.name;
-      if (artist) artist.textContent = data.artist;
-
-      cover.decode().then(() => {
-        banner.style.display = "block";
-      });
+      document.getElementById("now-playing-cover").src = data.cover;
+      document.getElementById("now-playing-name").textContent = data.name;
+      document.getElementById("now-playing-artist").textContent = data.artist;
+      banner.style.display = "block";
     } else {
       banner.style.display = "none";
     }
-  } catch (error) {
-    console.error("Now Playing fetch failed", error);
+  } catch (e) {
     banner.style.display = "none";
   }
 }
 
-initializeFromUrlParams();
-checkAuthStatus();
+// Kickoff
+init();
 updateNowPlaying();
 setInterval(updateNowPlaying, 60000);

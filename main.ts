@@ -62,7 +62,8 @@ async function getAccessTokenFromRefresh() {
 }
 
 app.get("/login", (c) => {
-  const scope = "user-library-read user-read-currently-playing";
+  const scope =
+    "user-library-read user-read-currently-playing playlist-read-private playlist-read-collaborative";
   const authUrl = new URL("https://accounts.spotify.com/authorize");
   authUrl.searchParams.append("response_type", "code");
   authUrl.searchParams.append("client_id", CLIENT_ID!);
@@ -296,6 +297,7 @@ app.get("/api/now-playing", async (c) => {
       artist: data.item.artists.map((a: { name: string }) => a.name).join(", "),
       album: data.item.album.name,
       cover: data.item.album.images[0]?.url || "",
+      link: data.item.external_urls.spotify,
       timestamp: Date.now(),
     };
 
@@ -313,7 +315,7 @@ app.get("/api/now-playing", async (c) => {
       // Update latest
       await kv.set(lastKey, currentTrack);
       console.log(
-        `🎵 New track recorded: ${currentTrack.name} - ${currentTrack.artist}`,
+        `New track recorded: ${currentTrack.name} - ${currentTrack.artist}`,
       );
     }
 
@@ -322,6 +324,53 @@ app.get("/api/now-playing", async (c) => {
     console.error("Error fetching now playing:", e);
     return c.json({ playing: false, error: String(e) });
   }
+});
+
+app.get("/api/playlists", async (c) => {
+  const token = await getAccessTokenFromRefresh();
+  if (!token) return c.json({ error: "Unauthorized" }, 401);
+
+  const res = await fetch("https://api.spotify.com/v1/me/playlists?limit=50", {
+    headers: { "Authorization": `Bearer ${token}` },
+  });
+  const data = await res.json();
+  return c.json(data);
+});
+
+app.get("/api/playlists/:id/tracks", async (c) => {
+  const id = c.req.param("id");
+  const token = await getAccessTokenFromRefresh();
+  if (!token) return c.json({ error: "Unauthorized" }, 401);
+
+  const res = await fetch(
+    `https://api.spotify.com/v1/playlists/${id}/tracks?limit=100`,
+    {
+      headers: { "Authorization": `Bearer ${token}` },
+    },
+  );
+  const data = await res.json();
+  return c.json(data);
+});
+
+app.get("/api/history", async (c) => {
+  const limit = parseInt(c.req.query("limit") || "6");
+  const cursor = c.req.query("cursor");
+
+  const iter = kv.list(
+    { prefix: ["listening_history"] },
+    { reverse: true, limit, cursor },
+  );
+
+  const history = [];
+  for await (const entry of iter) {
+    if (entry.key[1] === "latest") continue;
+    history.push(entry.value);
+  }
+
+  return c.json({
+    history,
+    nextCursor: iter.cursor || null,
+  });
 });
 
 Deno.serve({ port: 8000 }, app.fetch);

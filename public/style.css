@@ -1,3 +1,9 @@
+:root {
+  --font-mono: "Fira Code", monospace;
+  --transition-fast: 150ms ease;
+}
+
+/* Base layout using design tokens */
 .container {
   padding-top: var(--sp-4xl);
   padding-bottom: var(--sp-4xl);
@@ -13,11 +19,11 @@
   z-index: -1;
   filter: blur(80px);
   pointer-events: none;
+  opacity: 0.4;
 }
 
 header {
   margin-bottom: var(--sp-xl);
-  text-align: left;
 }
 
 .header-row {
@@ -27,7 +33,6 @@ header {
   gap: var(--sp-sm);
   margin-bottom: var(--sp-xs);
 }
-
 
 .logo {
   flex: 1;
@@ -43,24 +48,19 @@ header {
 
 .logo h1 {
   color: var(--accent);
+  margin: 0;
+  font-size: var(--fs-xl);
 }
 
 .count-badge {
   flex-shrink: 0;
   background: var(--bg-alt);
   color: var(--accent);
-  border: 1px solid var(--border);
   font-size: var(--fs-xs);
-  padding: 2px 8px;
+  padding: 0.125rem 0.5rem;
   border-radius: var(--radius-full);
   margin-left: var(--sp-xs);
-  font-family: var(--font);
-}
-
-.subtitle {
-  color: var(--text-muted);
-  font-size: var(--fs-md);
-  margin-top: 0;
+  font-family: var(--font-mono);
 }
 
 .status-banner-wrapper {
@@ -69,17 +69,50 @@ header {
 }
 
 @media (min-width: 800px) {
-  .status-banner-wrapper  {
+  .status-banner-wrapper {
     justify-content: flex-end;
   }
 }
 
 .status-banner {
-  padding: 10px 14px;
-  min-width: 240px;
-  transition: all 0.3s ease;
+  padding: 0.625rem 0.875rem;
+  min-width: 15rem;
 }
 
+/* Navigation */
+.main-nav {
+  display: flex;
+  gap: var(--sp-xl);
+  margin-top: var(--sp-lg);
+}
+
+.nav-link {
+  color: var(--text-muted);
+  text-decoration: none;
+  font-weight: 700;
+  font-size: var(--fs-md);
+}
+
+.nav-link:hover,
+.nav-link.active {
+  color: var(--accent);
+}
+
+.page-view {
+  display: none;
+}
+
+.page-view.active {
+  display: block;
+}
+
+.view-meta {
+  margin-bottom: var(--sp-lg);
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+
+/* Now Playing Widget */
 .now-playing-content {
   display: flex;
   align-items: center;
@@ -88,17 +121,16 @@ header {
 
 .now-playing-cover-wrapper {
   position: relative;
-  width: 42px;
-  height: 42px;
+  width: 2.625rem;
+  height: 2.625rem;
   flex-shrink: 0;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   overflow: hidden;
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
 }
 
 #now-playing-cover {
   width: 100%;
-  aspect-ratio: 1 / 1;
+  aspect-ratio: 1/1;
   object-fit: cover;
 }
 
@@ -111,16 +143,16 @@ header {
 
 .track-name {
   font-weight: 700;
-  font-size: 13px;
+  font-size: 0.8125rem;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   color: var(--text);
-  margin-bottom: 2px;
+  margin-bottom: 0.125rem;
 }
 
 .artist-name {
-  font-size: 11px;
+  font-size: 0.6875rem;
   color: var(--text-muted);
   white-space: nowrap;
   overflow: hidden;
@@ -128,16 +160,7 @@ header {
   font-weight: 500;
 }
 
-.sync-message {
-  position: absolute;
-  top: 2rem;
-  right: 2rem;
-  margin-top: 1rem;
-  font-size: 13px;
-}
-
-
-/* Controls */
+/* Controls & Filters */
 .controls-section {
   margin-bottom: var(--sp-lg);
 }
@@ -145,7 +168,8 @@ header {
 .filter-bar {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--sp-lg);
+  gap: var(--sp-md);
+  align-items: flex-end;
 }
 
 .filter-group {
@@ -170,106 +194,143 @@ header {
 }
 
 .filter-group select,
-.filter-group input
- {
+.filter-group input {
   background: var(--bg-alt);
-  border: 1px solid var(--border);
-  padding: 6px 12px;
+  border: none;
+  padding: 0.5rem 0.75rem;
   border-radius: var(--radius);
   color: var(--text);
   outline: none;
   cursor: pointer;
 }
 
-.filter-group input {
-    cursor: text;
+.search-container input {
+  cursor: text;
 }
 
-/* Album Card Overrides to match pnetto.com/work style */
-.album-card {
-    background: var(--bg);
-    padding: 0 !important;
-    transition: background-color var(--dur) ease;
-    border: 1px solid var(--border) !important;
+/* Universal Grids & Cards */
+.list-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+  gap: var(--sp-lg);
 }
 
-.album-cover {
-  aspect-ratio: 1 / 1;
+@media (min-width: 800px) {
+  .albums-grid, 
+  .history-grid,
+  .list-grid {
+    grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+  }
 }
 
-.album-info {
+.album-card, .playlist-card {
+  background: var(--bg);
+  padding: 0;
+  cursor: pointer;
+}
+
+.album-cover, .playlist-cover {
+  aspect-ratio: 1/1;
+  width: 100%;
+  overflow: hidden;
+}
+
+.album-cover img, .playlist-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 0;
+}
+
+.album-info, .playlist-info {
   padding: var(--sp-md);
 }
 
-.album-name {
-  margin: 0 !important;
-  font-size: var(--fs-md) !important;
+.album-name, .playlist-name {
+  margin: 0;
+  font-size: var(--fs-md);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  font-weight: 700;
 }
 
-.album-artist {
-  margin: 4px 0 0 0 !important;
-  font-size: var(--fs-sm) !important;
-  color: var(--text) !important;
+.album-artist, .playlist-artist {
+  margin: 0.25rem 0 0 0;
+  font-size: var(--fs-sm);
+  color: var(--text);
 }
 
+/* History and Meta specifics */
 .album-meta-row {
-    display: flex;
-    justify-content: space-between;
-    font-size: var(--fs-xs) !important;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 0.5rem;
 }
 
 .album-year {
-  margin: 8px 0 0 0 !important;
-  color: var(--text-muted) !important;
-  display: block;
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
 }
 
 .genre-toggle {
-    border: 0;
-    line-height: 2;
+  font-size: var(--fs-xs);
+  color: var(--accent);
+  text-decoration: none;
+  border: 0;
 }
 
 .genre-list {
-    display: none;
+  display: none;
+  padding-top: 1rem;
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
 }
 
 .genre-list.is-visible {
-    display: block;
-    padding-top: 1rem;
-    font-size: var(--fs-xs) !important;
+  display: block;
 }
 
-@media (min-width: 600px) {
-    .albums-grid {
-        grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
-    }
-}
-
-.album-overlay {
-  display: none; /* We prefer the clean look */
-}
-
-/* Sync Footer */
-.sync-footer {
-  margin-top: var(--sp-4xl);
-  padding: var(--sp-2xl) 0;
-  border-top: 1px solid var(--border);
+/* Track list (Legacy/Minority use) */
+.tracklist {
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  gap: var(--sp-md);
+}
+
+.track-item {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-md);
+}
+
+.track-thumb {
+  width: 2.5rem;
+  height: 2.5rem;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+}
+
+/* Buttons */
+.text-btn {
+  background: none;
+  border: none;
+  color: var(--accent);
+  cursor: pointer;
+  padding: 0;
+  font-weight: 700;
+  margin-bottom: var(--sp-xl);
 }
 
 .footer-btn {
-  background: transparent;
+  background: var(--bg-alt);
   color: var(--accent);
-  border: 1px solid var(--accent);
-  padding: 12px 24px;
+  border: none;
+  padding: 0.75rem 1.5rem;
   border-radius: var(--radius);
   font-weight: bold;
   cursor: pointer;
-  transition: all var(--dur) ease;
 }
 
 .footer-btn:hover {
@@ -279,14 +340,28 @@ header {
 
 .footer-btn:disabled {
   opacity: 0.5;
-  border-color: var(--border);
+  cursor: not-allowed;
+}
+
+.sync-footer, .load-more-container {
+  margin-top: var(--sp-4xl);
+  padding: var(--sp-2xl) 0;
+  display: flex;
+  justify-content: center;
+}
+
+/* Shared Utilities */
+.empty-state {
+  grid-column: 1 / -1;
+  padding: var(--sp-4xl) 0;
+  text-align: center;
   color: var(--text-muted);
 }
 
-.album-cover {
-    cursor: pointer;
-}
-
-.album-cover img {
-    border-radius: 0;
+.sync-message {
+  position: absolute;
+  top: 2rem;
+  right: 2rem;
+  margin-top: 1rem;
+  font-size: 0.8125rem;
 }
