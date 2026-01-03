@@ -48,6 +48,44 @@ header {
   margin-top: 0;
 }
 
+.sync-status-badge {
+  position: fixed;
+  top: var(--sp-lg);
+  right: var(--sp-lg);
+  background: var(--bg-alt);
+  color: var(--accent);
+  border: 1px solid var(--border);
+  font-size: var(--fs-sm);
+  padding: 8px 16px;
+  border-radius: var(--radius-full);
+  font-family: var(--font);
+  display: flex;
+  align-items: center;
+  gap: var(--sp-xs);
+  z-index: 1000;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.sync-pulse {
+  width: 8px;
+  height: 8px;
+  background: var(--accent);
+  border-radius: 50%;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.5;
+    transform: scale(1.2);
+  }
+}
+
+
 /* Controls */
 .controls-section {
   margin-bottom: var(--sp-2xl);

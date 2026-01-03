@@ -38,8 +38,11 @@ async function fetchAlbums() {
   }
 }
 
+let isSyncing = false;
+
 async function syncVault() {
   const syncBtn = document.getElementById("sync-vault-btn");
+  const syncStatus = document.getElementById("sync-status");
 
   const authRes = await fetch("api/auth/status");
   const authData = await authRes.json();
@@ -51,6 +54,9 @@ async function syncVault() {
   const originalText = syncBtn.textContent;
   syncBtn.disabled = true;
   syncBtn.textContent = "Scanning Archive...";
+
+  isSyncing = true;
+  syncStatus.style.display = "flex";
 
   try {
     const response = await fetch("api/sync");
@@ -73,10 +79,21 @@ async function syncVault() {
   } catch (e) {
     console.error("Sync interrupted", e);
   } finally {
+    isSyncing = false;
+    syncStatus.style.display = "none";
     syncBtn.disabled = false;
     syncBtn.textContent = originalText;
   }
 }
+
+// Warn user before leaving during sync
+globalThis.addEventListener("beforeunload", (e) => {
+  if (isSyncing) {
+    e.preventDefault();
+    e.returnValue = "";
+    return "";
+  }
+});
 
 function updateAlbumCount(count) {
   const badge = document.getElementById("album-count");
