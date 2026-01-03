@@ -329,7 +329,7 @@ function renderTracks(container, tracks, options = {}) {
     if (isAlbum) {
       clone.querySelector(".album-year").textContent = track.year;
       clone.querySelector(".genre-list").textContent =
-        track.genres?.join(", ") || "Experimental 🦄";
+        track.genres?.join(", ") || "No words could ever describe this 🦄";
 
       card.onclick = (e) => {
         if (e.target.matches(".genre-toggle")) {

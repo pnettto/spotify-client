@@ -3,22 +3,25 @@ import { serveStatic } from "hono/deno";
 import "@std/dotenv/load";
 import { exists } from "@std/fs/exists";
 
-const app = new Hono();
-
+/**
+ * Configuration & Constants
+ */
 const CLIENT_ID = Deno.env.get("SPOTIFY_CLIENT_ID");
 const CLIENT_SECRET = Deno.env.get("SPOTIFY_CLIENT_SECRET");
 const REDIRECT_URI = Deno.env.get("SPOTIFY_REDIRECT_URI");
 
-const kv = await Deno.openKv();
-
-console.log(
-  `\n🚀 Server started at ${REDIRECT_URI?.replace("/callback", "")}`,
-);
-console.log(`🔗 Spotify Redirect URI: ${REDIRECT_URI}\n`);
-
 const TOKEN_FILE = "./.cache/refresh_token";
 const CACHE_FILE = "./.cache/albums_cache.json";
 
+const app = new Hono();
+const kv = await Deno.openKv();
+
+console.log(`\nServer started at ${REDIRECT_URI?.replace("/callback", "")}`);
+console.log(`Spotify Redirect URI: ${REDIRECT_URI}\n`);
+
+/**
+ * Types & Interfaces
+ */
 interface Album {
   name: string;
   artist: string;
@@ -28,6 +31,7 @@ interface Album {
   link: string;
   uri: string;
   genres: string[];
+  popularity: number;
 }
 
 interface SpotifyAlbumItem {
@@ -42,7 +46,9 @@ interface SpotifyAlbumItem {
   };
 }
 
-// Helper to get access token from refresh token
+/**
+ * Helper Functions
+ */
 async function getAccessTokenFromRefresh() {
   if (!(await exists(TOKEN_FILE))) return null;
   const refreshToken = await Deno.readTextFile(TOKEN_FILE);
@@ -61,6 +67,143 @@ async function getAccessTokenFromRefresh() {
   return data.access_token;
 }
 
+async function isCacheFresh(token: string) {
+  try {
+    const apiUrl = "https://api.spotify.com/v1/me/albums?limit=10";
+    const res = await fetch(apiUrl, {
+      headers: { "Authorization": `Bearer ${token}` },
+    });
+    if (!res.ok) throw new Error("Spotify error");
+    const data = await res.json();
+    const batch = data.items || [];
+
+    if (!(await exists(CACHE_FILE))) {
+      console.log("Cache doesn't exist yet.");
+      return false;
+    }
+
+    const cached: Album[] = JSON.parse(await Deno.readTextFile(CACHE_FILE));
+
+    // Check if batch matches the top of the cache
+    const isMatch = cached.length >= batch.length &&
+      batch.every((item: SpotifyAlbumItem, idx: number) =>
+        item.album.external_urls.spotify === cached[idx]?.link
+      );
+
+    console.log(
+      isMatch ? "Cache matches newest entries." : "Cache refresh needed.",
+    );
+    return isMatch;
+  } catch (e) {
+    console.error("Cache freshness check failed:", e);
+    return false;
+  }
+}
+
+async function checkPartialCache(
+  items: Album[],
+): Promise<[Album[] | null, string | null]> {
+  try {
+    if (!(await exists(CACHE_FILE))) return [null, "No cache file"];
+
+    const cached: Album[] = JSON.parse(await Deno.readTextFile(CACHE_FILE));
+    const MATCH_THRESHOLD = 5;
+    const MAX_NEW_ITEMS = 45;
+
+    for (let i = 0; i < MAX_NEW_ITEMS; i++) {
+      const testBatch = items.slice(i, i + MATCH_THRESHOLD);
+      const hasMatch = testBatch.every((testItem, idx) =>
+        testItem.uri === cached[idx]?.uri
+      );
+
+      if (hasMatch) {
+        console.log(
+          `Cache hit at position ${i}, performing incremental update.`,
+        );
+        const newItems = items.slice(0, i);
+        const newUris = new Set(newItems.map((item) => item.uri));
+        const deduplicatedCache = cached.filter((ci) => !newUris.has(ci.uri));
+        return [[...newItems, ...deduplicatedCache], null];
+      }
+    }
+    return [null, "No partial cache sequence found"];
+  } catch (e) {
+    return [null, `Cache check failed: ${e instanceof Error ? e.message : e}`];
+  }
+}
+
+async function syncLibrary(token: string) {
+  const apiUrl = "https://api.spotify.com/v1/me/albums?limit=50";
+  console.log("Sync: Starting full library download...");
+
+  let all: Album[] = [];
+  let nextUrl: string | null = apiUrl;
+
+  while (nextUrl) {
+    console.log(`Fetching: ${nextUrl}`);
+    const resp = await fetch(nextUrl, {
+      headers: { "Authorization": `Bearer ${token}` },
+    });
+
+    if (!resp.ok) break;
+
+    const data = await resp.json();
+    if (!data.items) break;
+
+    const artistIds = [
+      ...new Set(
+        data.items.map((i: SpotifyAlbumItem) => i.album.artists[0].id),
+      ),
+    ].join(",");
+    const genreMap: Record<string, string[]> = {};
+
+    if (artistIds) {
+      const artRes = await fetch(
+        `https://api.spotify.com/v1/artists?ids=${artistIds}`,
+        {
+          headers: { "Authorization": `Bearer ${token}` },
+        },
+      );
+      if (artRes.ok) {
+        const artData = await artRes.json();
+        artData.artists.forEach((a: { id: string; genres: string[] }) =>
+          genreMap[a.id] = a.genres
+        );
+      }
+    }
+
+    const items: Album[] = data.items.map((i: SpotifyAlbumItem) => ({
+      name: i.album.name,
+      artist: i.album.artists.map((a) => a.name).join(", "),
+      year: i.album.release_date.split("-")[0],
+      full_date: i.album.release_date,
+      cover: i.album.images[0]?.url || "",
+      link: i.album.external_urls.spotify,
+      uri: i.album.uri,
+      genres: genreMap[i.album.artists[0].id] || [],
+      popularity: i.album.popularity || 0,
+    }));
+
+    // Check for incremental sync on the first page
+    if (all.length === 0) {
+      const [updated] = await checkPartialCache(items);
+      if (updated) {
+        all = updated;
+        break;
+      }
+    }
+
+    all = [...all, ...items];
+    nextUrl = data.next;
+  }
+
+  await Deno.writeTextFile(CACHE_FILE, JSON.stringify(all));
+  return { status: "updated", count: all.length };
+}
+
+/**
+ * Auth Routes
+ */
 app.get("/login", (c) => {
   const scope =
     "user-library-read user-read-currently-playing playlist-read-private playlist-read-collaborative";
@@ -87,192 +230,45 @@ app.get("/callback", async (c) => {
       redirect_uri: REDIRECT_URI!,
     }),
   });
+
   const data = await response.json();
   if (data.refresh_token) {
     await Deno.writeTextFile(TOKEN_FILE, data.refresh_token);
-    return c.text("Logged in! Go back to the app.");
+    return c.redirect("/");
   }
   return c.text("Authentication failed", 400);
 });
 
-async function isCacheFresh(token: string) {
-  const apiUrl = "https://api.spotify.com/v1/me/albums?limit=10";
-  const res = await fetch(apiUrl, {
-    headers: { "Authorization": `Bearer ${token}` },
-  });
-  if (!res.ok) throw new Error("Spotify error");
-  const data = await res.json();
-  const batch = data.items || [];
+app.get("/api/auth/status", async (c) => {
+  return c.json({ authenticated: await exists(TOKEN_FILE) });
+});
 
-  let cached: Album[] = [];
-  if (await exists(CACHE_FILE)) {
-    cached = JSON.parse(await Deno.readTextFile(CACHE_FILE));
-  } else {
-    console.log("Cache doesn't exist yet. Aborting...");
-    return false;
-  }
-
-  // Check if batch matches the cache
-  const isMatch = cached.length >= batch.length &&
-    batch.every((item: SpotifyAlbumItem, idx: number) =>
-      item.album.external_urls.spotify === cached[idx]?.link
-    );
-
-  if (isMatch) {
-    console.log("Cache matches the newest entries.");
-  } else {
-    console.log("Cache does not match newest entries, refresh needed.");
-  }
-
-  return isMatch;
-}
-
-async function checkPartialCache(
-  items: Album[],
-): Promise<[Album[] | null, string | null]> {
-  console.log("Check if there is a sequence of 5 repeated albums");
-  try {
-    const cached = JSON.parse(await Deno.readTextFile(CACHE_FILE));
-    const MATCH_THRESHOLD = 5;
-    const MAX_NEW_ITEMS = 45; // items.length is 50, leave buffer for match window
-
-    // Batch size is 50
-    for (let i = 0; i < MAX_NEW_ITEMS; i++) {
-      const testBatch = items.slice(i, i + MATCH_THRESHOLD);
-      const hasMatch = testBatch.every((testItem: Album, idx) => {
-        return testItem.uri === cached[idx]?.uri;
-      });
-
-      if (hasMatch) {
-        console.log(
-          `Cache hit at position ${i}, doing incremental update`,
-        );
-        const newItems = items.slice(0, i);
-        const newUris = new Set(newItems.map((i) => i.uri));
-        const deduplicatedCache = cached.filter((ci: Album) =>
-          !newUris.has(ci.uri)
-        );
-        const finalItems = [...newItems, ...deduplicatedCache];
-
-        return [finalItems, null];
-      }
-    }
-
-    return [null, "No partial cache sequence found"];
-  } catch (e) {
-    return [null, `Cache check failed: ${e instanceof Error ? e.message : e}`];
-  }
-}
-
-async function syncLibrary(token: string) {
-  const apiUrl = "https://api.spotify.com/v1/me/albums?limit=50";
-
-  console.log("🔄 Sync: Downloading all...");
-  let all: Album[] = [];
-  let nextUrl: string | null = apiUrl;
-
-  while (nextUrl) {
-    console.log(`Fetching:`, nextUrl);
-
-    const resp: Response = await fetch(nextUrl, {
-      headers: { "Authorization": `Bearer ${token}` },
-    });
-
-    if (!resp.ok) {
-      console.log("resp not ok");
-      break;
-    }
-
-    const data = await resp.json();
-    if (!data.items) {
-      console.log("no data.items");
-      break;
-    }
-
-    const artistIds = [
-      ...new Set(
-        data.items.map((i: SpotifyAlbumItem) => i.album.artists[0].id),
-      ),
-    ].join(",");
-    const genreMap: Record<string, string[]> = {};
-    if (artistIds) {
-      const artRes = await fetch(
-        `https://api.spotify.com/v1/artists?ids=${artistIds}`,
-        { headers: { "Authorization": `Bearer ${token}` } },
-      );
-      if (artRes.ok) {
-        const artData = await artRes.json();
-        artData.artists.forEach((a: { id: string; genres: string[] }) =>
-          genreMap[a.id] = a.genres
-        );
-      }
-    }
-
-    const items: Album[] = data.items.map((i: SpotifyAlbumItem) => ({
-      name: i.album.name,
-      artist: i.album.artists.map((a) => a.name).join(", "),
-      year: i.album.release_date.split("-")[0],
-      full_date: i.album.release_date,
-      cover: i.album.images[0]?.url || "",
-      link: i.album.external_urls.spotify,
-      uri: i.album.uri,
-      genres: genreMap[i.album.artists[0].id] || [],
-      popularity: i.album.popularity || 0,
-    }));
-
-    // Only check the first page
-    if (all.length === 0) {
-      const [updated, err] = await checkPartialCache(items);
-      if (updated) {
-        all = updated;
-        break; // from while loop
-      } else {
-        console.log(`Partial cache check error: ${err}`);
-      }
-    }
-
-    all = [...all, ...items];
-    nextUrl = data.next;
-  }
-
-  console.log("Writing to file...");
-  await Deno.writeTextFile(CACHE_FILE, JSON.stringify(all));
-
-  return { status: "updated", count: all.length };
-}
-
-// Frontend
-app.use("/*", serveStatic({ root: "./public" }));
-
-// Cache-only endpoint
+/**
+ * Albums & Sync Routes
+ */
 app.get("/api/albums", async (c) => {
   if (!(await exists(CACHE_FILE))) return c.json({ albums: [] });
   const albums = JSON.parse(await Deno.readTextFile(CACHE_FILE));
   return c.json({ albums });
 });
 
-// Sync endpoint
 app.get("/api/sync", async (c) => {
   const forceSync = c.req.query("force") !== undefined;
   const token = await getAccessTokenFromRefresh();
   if (!token) return c.json({ error: "Unauthorized" }, 401);
 
-  const isUpToDate = await isCacheFresh(token);
-
-  if (isUpToDate && !forceSync) {
+  if (await isCacheFresh(token) && !forceSync) {
     return c.json({ status: "fresh" });
-  } else {
-    const result = await syncLibrary(token);
-    const albums = JSON.parse(await Deno.readTextFile(CACHE_FILE));
-    return c.json({ ...result, albums });
   }
+
+  const result = await syncLibrary(token);
+  const albums = JSON.parse(await Deno.readTextFile(CACHE_FILE));
+  return c.json({ ...result, albums });
 });
 
-app.get("/api/auth/status", async (c) => {
-  const auth = await exists(TOKEN_FILE);
-  return c.json({ authenticated: auth });
-});
-
+/**
+ * Now Playing & History Routes
+ */
 app.get("/api/now-playing", async (c) => {
   const token = await getAccessTokenFromRefresh();
   if (!token) return c.json({ playing: false });
@@ -301,18 +297,15 @@ app.get("/api/now-playing", async (c) => {
       timestamp: Date.now(),
     };
 
-    // Check history and save if changed
+    // Save to Deno Kv history if different from last recorded track
     const lastKey = ["listening_history", "latest"];
     const lastEntry = await kv.get<typeof currentTrack>(lastKey);
 
     if (
-      !lastEntry.value ||
-      lastEntry.value.name !== currentTrack.name ||
+      !lastEntry.value || lastEntry.value.name !== currentTrack.name ||
       lastEntry.value.artist !== currentTrack.artist
     ) {
-      // Save to history with timestamp for sorting
       await kv.set(["listening_history", currentTrack.timestamp], currentTrack);
-      // Update latest
       await kv.set(lastKey, currentTrack);
       console.log(
         `New track recorded: ${currentTrack.name} - ${currentTrack.artist}`,
@@ -326,6 +319,28 @@ app.get("/api/now-playing", async (c) => {
   }
 });
 
+app.get("/api/history", async (c) => {
+  const limit = parseInt(c.req.query("limit") || "6");
+  const cursor = c.req.query("cursor");
+
+  const iter = kv.list({ prefix: ["listening_history"] }, {
+    reverse: true,
+    limit,
+    cursor,
+  });
+  const history = [];
+
+  for await (const entry of iter) {
+    if (entry.key[1] === "latest") continue;
+    history.push(entry.value);
+  }
+
+  return c.json({ history, nextCursor: iter.cursor || null });
+});
+
+/**
+ * Playlists Routes
+ */
 app.get("/api/playlists", async (c) => {
   const token = await getAccessTokenFromRefresh();
   if (!token) return c.json({ error: "Unauthorized" }, 401);
@@ -333,8 +348,7 @@ app.get("/api/playlists", async (c) => {
   const res = await fetch("https://api.spotify.com/v1/me/playlists?limit=50", {
     headers: { "Authorization": `Bearer ${token}` },
   });
-  const data = await res.json();
-  return c.json(data);
+  return c.json(await res.json());
 });
 
 app.get("/api/playlists/:id/tracks", async (c) => {
@@ -348,29 +362,12 @@ app.get("/api/playlists/:id/tracks", async (c) => {
       headers: { "Authorization": `Bearer ${token}` },
     },
   );
-  const data = await res.json();
-  return c.json(data);
+  return c.json(await res.json());
 });
 
-app.get("/api/history", async (c) => {
-  const limit = parseInt(c.req.query("limit") || "6");
-  const cursor = c.req.query("cursor");
-
-  const iter = kv.list(
-    { prefix: ["listening_history"] },
-    { reverse: true, limit, cursor },
-  );
-
-  const history = [];
-  for await (const entry of iter) {
-    if (entry.key[1] === "latest") continue;
-    history.push(entry.value);
-  }
-
-  return c.json({
-    history,
-    nextCursor: iter.cursor || null,
-  });
-});
+/**
+ * Static Files & Server Start
+ */
+app.use("/*", serveStatic({ root: "./public" }));
 
 Deno.serve({ port: 8000 }, app.fetch);
