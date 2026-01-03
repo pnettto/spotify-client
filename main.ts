@@ -9,6 +9,8 @@ const CLIENT_ID = Deno.env.get("SPOTIFY_CLIENT_ID");
 const CLIENT_SECRET = Deno.env.get("SPOTIFY_CLIENT_SECRET");
 const REDIRECT_URI = Deno.env.get("SPOTIFY_REDIRECT_URI");
 
+const kv = await Deno.openKv();
+
 console.log(
   `\n🚀 Server started at ${REDIRECT_URI?.replace("/callback", "")}`,
 );
@@ -60,12 +62,12 @@ async function getAccessTokenFromRefresh() {
 }
 
 app.get("/login", (c) => {
-  const scope = "user-library-read";
+  const scope = "user-library-read user-read-currently-playing";
   const authUrl = new URL("https://accounts.spotify.com/authorize");
   authUrl.searchParams.append("response_type", "code");
   authUrl.searchParams.append("client_id", CLIENT_ID!);
   authUrl.searchParams.append("scope", scope);
-  authUrl.searchParams.append("redirect_uri", REDIRECT_URI);
+  authUrl.searchParams.append("redirect_uri", REDIRECT_URI!);
   authUrl.searchParams.append("show_dialog", "true");
   return c.redirect(authUrl.toString());
 });
@@ -81,7 +83,7 @@ app.get("/callback", async (c) => {
     body: new URLSearchParams({
       grant_type: "authorization_code",
       code: code || "",
-      redirect_uri: REDIRECT_URI,
+      redirect_uri: REDIRECT_URI!,
     }),
   });
   const data = await response.json();
@@ -268,6 +270,58 @@ app.get("/api/sync", async (c) => {
 app.get("/api/auth/status", async (c) => {
   const auth = await exists(TOKEN_FILE);
   return c.json({ authenticated: auth });
+});
+
+app.get("/api/now-playing", async (c) => {
+  const token = await getAccessTokenFromRefresh();
+  if (!token) return c.json({ playing: false });
+
+  try {
+    const res = await fetch(
+      "https://api.spotify.com/v1/me/player/currently-playing",
+      {
+        headers: { "Authorization": `Bearer ${token}` },
+      },
+    );
+
+    if (res.status === 204 || res.status > 400) {
+      return c.json({ playing: false });
+    }
+
+    const data = await res.json();
+    if (!data.item) return c.json({ playing: false });
+
+    const currentTrack = {
+      name: data.item.name,
+      artist: data.item.artists.map((a: { name: string }) => a.name).join(", "),
+      album: data.item.album.name,
+      cover: data.item.album.images[0]?.url || "",
+      timestamp: Date.now(),
+    };
+
+    // Check history and save if changed
+    const lastKey = ["listening_history", "latest"];
+    const lastEntry = await kv.get<typeof currentTrack>(lastKey);
+
+    if (
+      !lastEntry.value ||
+      lastEntry.value.name !== currentTrack.name ||
+      lastEntry.value.artist !== currentTrack.artist
+    ) {
+      // Save to history with timestamp for sorting
+      await kv.set(["listening_history", currentTrack.timestamp], currentTrack);
+      // Update latest
+      await kv.set(lastKey, currentTrack);
+      console.log(
+        `🎵 New track recorded: ${currentTrack.name} - ${currentTrack.artist}`,
+      );
+    }
+
+    return c.json({ playing: true, ...currentTrack });
+  } catch (e) {
+    console.error("Error fetching now playing:", e);
+    return c.json({ playing: false, error: String(e) });
+  }
 });
 
 Deno.serve({ port: 8000 }, app.fetch);

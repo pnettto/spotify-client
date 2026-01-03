@@ -11,20 +11,32 @@
     <link rel="stylesheet" href="style.css">
   </head>
   <body>
-    <div class="background-glow"></div>
+    <div id="sync-status" class="sync-message" style="display: none">
+      Syncing collection...
+    </div>
 
     <main class="container is-loaded">
       <header>
-        <div class="logo">
-          <h1>Pedro's Albums</h1>
-          <span id="album-count" class="count-badge">0</span>
-        </div>
-        <p class="subtitle" id="user-context">
-          My collection of albums on Spotify.
-        </p>
-        <div id="sync-status" class="sync-status-badge" style="display: none">
-          <span class="sync-pulse"></span>
-          Syncing collection...
+        <div class="header-row">
+          <div class="logo">
+            <h1>Pedro's Albums</h1>
+          </div>
+
+          <div class="status-banner-wrapper">
+            <div class="status-banner">
+              <div id="now-playing" style="display: none">
+                <div class="now-playing-content">
+                  <div class="now-playing-cover-wrapper">
+                    <img id="now-playing-cover" src="" alt="Album Cover">
+                  </div>
+                  <div class="now-playing-info">
+                    <span id="now-playing-name" class="track-name"></span>
+                    <span id="now-playing-artist" class="artist-name"></span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </header>
 
@@ -72,6 +84,10 @@
           </div>
         </div>
       </section>
+
+      <div>
+        Showing <span id="album-count">0</span> albums
+      </div>
 
       <section class="project-grid albums-grid" id="albums-grid">
         <!-- Rendered via script.js -->

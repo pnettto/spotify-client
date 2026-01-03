@@ -268,5 +268,36 @@ function renderAlbums(albums) {
   updateAlbumCount(albums.length);
 }
 
+async function updateNowPlaying() {
+  const banner = document.getElementById("now-playing");
+  if (!banner) return;
+
+  try {
+    const response = await fetch("api/now-playing");
+    const data = await response.json();
+
+    if (data.playing) {
+      const cover = document.getElementById("now-playing-cover");
+      const name = document.getElementById("now-playing-name");
+      const artist = document.getElementById("now-playing-artist");
+
+      if (cover) cover.src = data.cover;
+      if (name) name.textContent = data.name;
+      if (artist) artist.textContent = data.artist;
+
+      cover.decode().then(() => {
+        banner.style.display = "block";
+      });
+    } else {
+      banner.style.display = "none";
+    }
+  } catch (error) {
+    console.error("Now Playing fetch failed", error);
+    banner.style.display = "none";
+  }
+}
+
 initializeFromUrlParams();
 checkAuthStatus();
+updateNowPlaying();
+setInterval(updateNowPlaying, 60000);
