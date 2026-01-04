@@ -17,6 +17,8 @@ const app = new Hono();
 console.log(`DENO_KV_URL`, Deno.env.get("KV_URL"));
 console.log(`DENO_DEPLOYMENT_ID`, Deno.env.get("DENO_DEPLOYMENT_ID"));
 const DENO_KV_URL = Deno.env.get("KV_URL");
+const test = DENO_KV_URL?.split("").join("#");
+console.log(`test`, test);
 const kv = Deno.env.get("DENO_DEPLOYMENT_ID")
   ? await Deno.openKv(DENO_KV_URL) // Deno Deploy
   : await Deno.openKv("./db/kv.db"); // Docker
