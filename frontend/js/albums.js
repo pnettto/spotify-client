@@ -1,9 +1,4 @@
-import {
-  checkAuthStatus,
-  initNav,
-  renderTracks,
-  updateNowPlaying,
-} from "./shared.js";
+import { apiFetch, initNav, renderTracks, updateNowPlaying } from "./shared.js";
 
 let allAlbums = [];
 let isSyncing = false;
@@ -11,8 +6,8 @@ let searchTimeout;
 
 async function fetchAlbums() {
   try {
-    const res = await fetch("/api/albums");
-    const data = await res.json();
+    const data = await apiFetch("/api/albums");
+    console.log(`data`, data);
     allAlbums = data.albums || [];
 
     if (allAlbums.length > 0) {
@@ -39,10 +34,7 @@ async function syncVault() {
   syncStatus.style.display = "flex";
 
   try {
-    const res = await fetch("/api/sync");
-    if (res.status === 401) return (globalThis.location.href = "/login");
-
-    const data = await res.json();
+    const data = await apiFetch("/api/sync");
     if (data.status !== "fresh") {
       allAlbums = data.albums || [];
       populateGenreFilter(allAlbums);
@@ -137,12 +129,10 @@ function populateGenreFilter(albums) {
 
 // Init
 initNav();
-checkAuthStatus(() => {
-  fetchAlbums();
-  setTimeout(syncVault, 500);
-});
+fetchAlbums();
+setTimeout(syncVault, 500);
 updateNowPlaying();
-setInterval(updateNowPlaying, 60000);
+setInterval(updateNowPlaying, 30000); // 30s
 
 // Listeners
 document.getElementById("sync-vault-btn").onclick = syncVault;

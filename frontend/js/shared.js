@@ -2,22 +2,15 @@
  * Shared logic for Spotify Client
  */
 
-export async function checkAuthStatus(onAuth) {
-  try {
-    const res = await fetch("/api/auth/status");
-    const { authenticated } = await res.json();
-    if (authenticated) {
-      if (onAuth) onAuth();
-    } else {
-      const syncBtn = document.getElementById("sync-vault-btn");
-      if (syncBtn) {
-        syncBtn.textContent = "Connect to Sync";
-        syncBtn.onclick = () => (globalThis.location.href = "/login");
-      }
-    }
-  } catch (e) {
-    console.error("Auth check failed", e);
+export const apiUrl = "https://spotify.pnettto.deno.net";
+
+export async function apiFetch(url) {
+  const res = await fetch(`${apiUrl}${url}`);
+  if (!res.ok) {
+    throw new Error(`HTTP error. Status: ${res.status}`);
   }
+  const data = await res.json();
+  return data;
 }
 
 export function openInSpotify(link) {
@@ -94,8 +87,7 @@ export async function updateNowPlaying() {
   const banner = document.getElementById("now-playing");
   if (!banner) return;
   try {
-    const res = await fetch("https://spotify.pnettto.deno.net/api/history");
-    const data = await res.json();
+    const data = await apiFetch("/api/history");
 
     if (data.playing) {
       document.getElementById("now-playing-cover").src = data.cover;

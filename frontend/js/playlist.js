@@ -1,9 +1,4 @@
-import {
-  checkAuthStatus,
-  initNav,
-  renderTracks,
-  updateNowPlaying,
-} from "./shared.js";
+import { apiFetch, initNav, renderTracks, updateNowPlaying } from "./shared.js";
 
 async function fetchPlaylistTracks() {
   const pathParts = globalThis.location.pathname.split("/");
@@ -14,9 +9,9 @@ async function fetchPlaylistTracks() {
   const nameEl = document.getElementById("current-playlist-name");
 
   try {
-    const res = await fetch(`/api/playlists/${playlistId}/tracks`);
-    if (!res.ok) throw new Error("Failed to fetch tracks");
-    const { items = [] } = await res.json();
+    const { items = [] } = await apiFetch(
+      `/api/playlists/${playlistId}/tracks`,
+    );
 
     // Attempt to get name from API or just use placeholder
     nameEl.textContent = "Playlist Details";
@@ -30,11 +25,9 @@ async function fetchPlaylistTracks() {
 
 // Init
 initNav();
-checkAuthStatus(() => {
-  fetchPlaylistTracks();
-});
+fetchPlaylistTracks();
 updateNowPlaying();
-setInterval(updateNowPlaying, 60000);
+setInterval(updateNowPlaying, 30000); // 30s
 
 document.getElementById("back-to-playlists").onclick = () => {
   globalThis.location.href = "/playlists";

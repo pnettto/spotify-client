@@ -1,9 +1,4 @@
-import {
-  checkAuthStatus,
-  initNav,
-  renderTracks,
-  updateNowPlaying,
-} from "./shared.js";
+import { apiFetch, initNav, renderTracks, updateNowPlaying } from "./shared.js";
 
 let allHistory = [];
 let historyCursor = null;
@@ -14,14 +9,11 @@ async function fetchHistory() {
   const loadMoreBtn = document.getElementById("load-more-history");
 
   try {
-    const url = new URL("/api/history", globalThis.location.origin);
-    url.searchParams.append("limit", "50");
+    let url = "/api/history?limit=50";
+    if (historyCursor) url += `&cursor=${encodeURIComponent(historyCursor)}`;
+    const { history = [], nextCursor } = await apiFetch(url);
+
     const isAppending = !!historyCursor;
-    if (historyCursor) url.searchParams.append("cursor", historyCursor);
-
-    const res = await fetch(url);
-    const { history = [], nextCursor } = await res.json();
-
     allHistory = isAppending ? [...allHistory, ...history] : history;
     historyCursor = nextCursor;
 
@@ -83,11 +75,9 @@ function renderFilteredHistory() {
 
 // Init
 initNav();
-checkAuthStatus(() => {
-  fetchHistory();
-});
+fetchHistory();
 updateNowPlaying();
-setInterval(updateNowPlaying, 60000);
+setInterval(updateNowPlaying, 30000); // 30s
 
 // Listeners
 document.getElementById("load-more-history").onclick = fetchHistory;
@@ -95,5 +85,5 @@ const searchEl = document.getElementById("history-search");
 searchEl.onchange = renderFilteredHistory;
 searchEl.oninput = () => {
   clearTimeout(searchTimeout);
-  searchTimeout = setTimeout(renderFilteredHistory, 300);
+  searchTimeout = setTimeout(renderFilteredHistory, 500);
 };

@@ -1,9 +1,8 @@
-import { checkAuthStatus, initNav, updateNowPlaying } from "./shared.js";
+import { apiFetch, initNav, updateNowPlaying } from "./shared.js";
 
 async function fetchPlaylists() {
   try {
-    const res = await fetch("/api/playlists");
-    const { items = [] } = await res.json();
+    const { items = [] } = await apiFetch("/api/playlists");
     renderPlaylists(items);
   } catch (e) {
     console.error("Playlists failed", e);
@@ -28,8 +27,6 @@ function renderPlaylists(items) {
 
 // Init
 initNav();
-checkAuthStatus(() => {
-  fetchPlaylists();
-});
+fetchPlaylists();
 updateNowPlaying();
-setInterval(updateNowPlaying, 30000);
+setInterval(updateNowPlaying, 30000); // 30s
