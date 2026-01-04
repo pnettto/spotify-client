@@ -94,7 +94,7 @@ export async function updateNowPlaying() {
   const banner = document.getElementById("now-playing");
   if (!banner) return;
   try {
-    const res = await fetch("/api/now-playing");
+    const res = await fetch("https://spotify.pnettto.deno.net/api/history");
     const data = await res.json();
 
     if (data.playing) {

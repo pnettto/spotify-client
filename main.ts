@@ -330,6 +330,17 @@ app.get("/api/now-playing", async (c) => {
   }
 });
 
+app.get("/api/history/all", async (c) => {
+  const iter = kv.list({ prefix: ["listening_history"] }, {
+    reverse: true,
+  });
+  const history = [];
+  for await (const entry of iter) {
+    if (entry.key[1] !== "latest") history.push(entry.value);
+  }
+  return c.json({ history });
+});
+
 app.get("/api/history", async (c) => {
   const limit = parseInt(c.req.query("limit") || "6");
   const cursor = c.req.query("cursor");
