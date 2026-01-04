@@ -14,8 +14,9 @@ const ALBUMS_CHUNK_PREFIX = ["albums_v4"];
 const CHUNK_SIZE = 50;
 
 const app = new Hono();
+console.log(`DENO_KV_URL`, Deno.env.get("KV_URL"));
+console.log(`DENO_DEPLOYMENT_ID`, Deno.env.get("DENO_DEPLOYMENT_ID"));
 const DENO_KV_URL = Deno.env.get("KV_URL");
-console.log(`DENO_KV_URL`, DENO_KV_URL);
 const kv = Deno.env.get("DENO_DEPLOYMENT_ID")
   ? await Deno.openKv(DENO_KV_URL) // Deno Deploy
   : await Deno.openKv("./db/kv.db"); // Docker
