@@ -321,6 +321,10 @@ app.get("/api/playlists/:id/tracks", async (c) => {
   return c.json(await res.json());
 });
 
+// KV Admin
+import { registerKvRoutes } from "./kv/main.ts";
+registerKvRoutes(app);
+
 app.get("/", async (c, next) => {
   const res = await kv.get(REFRESH_TOKEN_KEY);
   if (!res.value) return c.redirect("/login");

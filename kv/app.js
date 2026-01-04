@@ -40,7 +40,7 @@ async function authFetch(url, options = {}) {
 }
 
 async function fetchEntries() {
-  const res = await authFetch("/api/entries");
+  const res = await authFetch("/kv/api/entries");
   const entries = await res.json();
   currentEntries = entries;
   renderEntries(entries);
@@ -79,7 +79,7 @@ globalThis.editEntry = (index) => {
 globalThis.deleteEntry = async (index) => {
   const key = currentEntries[index].key;
   if (confirm(`Delete key ${JSON.stringify(key)}?`)) {
-    await authFetch("/api/entries", {
+    await authFetch("/kv/api/entries", {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ key }),
@@ -118,7 +118,7 @@ saveBtn.addEventListener("click", async () => {
       return;
     }
 
-    const res = await authFetch("/api/entries", {
+    const res = await authFetch("/kv/api/entries", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ key, value }),
