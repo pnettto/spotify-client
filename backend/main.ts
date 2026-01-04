@@ -392,26 +392,6 @@ app.get("/api/playlists/:id/tracks", async (c) => {
   return c.json(await res.json());
 });
 
-app.get("/api/history/cleanup", async (c) => {
-  const iter = kv.list({ prefix: ["listening_history"] }, { reverse: false });
-  let lastUri = "";
-  let deletedCount = 0;
-
-  for await (const entry of iter) {
-    if (entry.key[1] === "latest") continue;
-
-    const track = entry.value as { uri: string };
-    if (track.uri === lastUri) {
-      await kv.delete(entry.key);
-      deletedCount++;
-    } else {
-      lastUri = track.uri;
-    }
-  }
-
-  return c.json({ status: "success", deletedCount });
-});
-
 // KV Admin
 import { registerKvRoutes } from "./kv/main.ts";
 registerKvRoutes(app);
