@@ -502,8 +502,10 @@ async function updateNowPlaying() {
       document.getElementById("now-playing-name").textContent = data.name;
       document.getElementById("now-playing-artist").textContent = data.artist;
       banner.style.display = "block";
+      banner.onclick = () => openInSpotify(data.link || data.uri);
     } else {
       banner.style.display = "none";
+      banner.onclick = null;
     }
   } catch (_e) {
     banner.style.display = "none";
