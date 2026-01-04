@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { cors } from "hono/cors";
 import { serveStatic } from "hono/deno";
 import "@std/dotenv/load";
 
@@ -14,6 +15,17 @@ const ALBUMS_CHUNK_PREFIX = ["albums_v4"];
 const CHUNK_SIZE = 50;
 
 const app = new Hono();
+// Handle api CORS
+app.use(
+  "/api/*",
+  cors({
+    origin: "*",
+    allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowHeaders: ["Content-Type", "Authorization"],
+    credentials: true,
+  }),
+);
+
 const kv = Deno.env.get("DENO_DEPLOYMENT_ID")
   ? await Deno.openKv() // Deno Deploy
   : await Deno.openKv("./db/kv.db"); // Docker
