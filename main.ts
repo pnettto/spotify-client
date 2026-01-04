@@ -136,6 +136,7 @@ async function syncLibrary(token: string) {
     if (!data.items) break;
 
     const artistIds = [...new Set(data.items.map((i) => i.album.artists[0].id))]
+      .filter((id) => !!id)
       .join(",");
     const genreMap: Record<string, string[]> = {};
 
