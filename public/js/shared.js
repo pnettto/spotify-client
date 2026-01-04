@@ -52,7 +52,6 @@ export function renderTracks(container, tracks, options = {}) {
   const template = document.getElementById("album-card-template");
 
   tracks.forEach((track) => {
-    console.log(`track`, track);
     if (!track) return;
     const clone = template.content.cloneNode(true);
     const card = clone.querySelector(".album-card");

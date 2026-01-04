@@ -283,7 +283,7 @@ header {
 }
 
 .genre-list {
-  display: block;
+  display: none;
   padding-top: 1rem;
   text-align: right;
   font-size: var(--fs-xs);
