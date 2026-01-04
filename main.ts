@@ -368,11 +368,36 @@ app.get("/api/playlists/:id/tracks", async (c) => {
 import { registerKvRoutes } from "./kv/main.ts";
 registerKvRoutes(app);
 
-app.get("/", async (c, next) => {
-  const res = await kv.get(REFRESH_TOKEN_KEY);
-  if (!res.value) return c.redirect("/login");
-  return next();
+app.use("*", async (c, next) => {
+  const path = c.req.path;
+  const isPage = path === "/" || path.startsWith("/albums") ||
+    path.startsWith("/playlists") || path.startsWith("/playlist/") ||
+    path.startsWith("/history") || path.endsWith(".html");
+  if (isPage) {
+    const res = await kv.get(REFRESH_TOKEN_KEY);
+    if (!res.value) return c.redirect("/login");
+  }
+  await next();
 });
+
+app.get("/", (c) => c.redirect("/albums"));
+app.get("/albums", (c) => c.html(Deno.readTextFileSync("./public/index.html")));
+app.get(
+  "/albums/:id",
+  (c) => c.html(Deno.readTextFileSync("./public/index.html")),
+);
+app.get(
+  "/playlists",
+  (c) => c.html(Deno.readTextFileSync("./public/playlists.html")),
+);
+app.get(
+  "/playlist/:id",
+  (c) => c.html(Deno.readTextFileSync("./public/playlist.html")),
+);
+app.get(
+  "/history",
+  (c) => c.html(Deno.readTextFileSync("./public/history.html")),
+);
 
 app.use("/*", serveStatic({ root: "./public" }));
 

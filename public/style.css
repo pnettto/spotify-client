@@ -283,8 +283,9 @@ header {
 }
 
 .genre-list {
-  display: none;
+  display: block;
   padding-top: 1rem;
+  text-align: right;
   font-size: var(--fs-xs);
   color: var(--text-muted);
 }
