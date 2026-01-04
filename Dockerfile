@@ -16,4 +16,4 @@ RUN --mount=type=cache,target=/deno-dir \
 
 EXPOSE 8000
 
-CMD ["run", "--allow-net", "--allow-read", "--allow-write=./.cache", "--allow-env", "--unstable-kv", "main.ts"]
+CMD ["run", "--allow-net", "--allow-read", "--allow-write=./db", "--allow-env", "--unstable-kv", "main.ts"]

@@ -14,7 +14,9 @@ const ALBUMS_CHUNK_PREFIX = ["albums_v4"];
 const CHUNK_SIZE = 50;
 
 const app = new Hono();
-const kv = await Deno.openKv();
+const kv = Deno.env.get("DENO_DEPLOYMENT_ID")
+  ? await Deno.openKv() // Deno Deploy
+  : await Deno.openKv("./db/kv.db"); // Docker
 
 console.log(`\nServer started at ${REDIRECT_URI?.replace("/callback", "")}`);
 console.log(`Spotify Redirect URI: ${REDIRECT_URI}\n`);

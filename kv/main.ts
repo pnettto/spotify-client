@@ -1,6 +1,6 @@
 import { Context, Hono } from "hono";
 import { serveStatic } from "hono/deno";
-const kv = await Deno.openKv();
+const kv = await Deno.openKv("./db/kv.db");
 
 export async function listEntries(c: Context) {
   const entries = [];

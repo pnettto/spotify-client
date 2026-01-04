@@ -71,6 +71,7 @@ header {
 @media (min-width: 800px) {
   .status-banner-wrapper {
     justify-content: flex-end;
+    height: 4rem;
   }
 }
 
