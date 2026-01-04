@@ -326,14 +326,17 @@ app.get("/api/now-playing", async (c) => {
     };
 
     const lastKey = ["listening_history", "latest"];
-    const lastEntry = await kv.get<{ name: string; artist: string }>(lastKey);
+    const lastEntry = await kv.get<typeof currentTrack>(lastKey);
 
+    // Only log if the track has changed (different URI)
     if (
-      !lastEntry.value || lastEntry.value.name !== currentTrack.name ||
-      lastEntry.value.artist !== currentTrack.artist
+      !lastEntry.value || lastEntry.value.uri !== currentTrack.uri
     ) {
-      await kv.set(["listening_history", currentTrack.timestamp], currentTrack);
-      await kv.set(lastKey, currentTrack);
+      await kv.atomic()
+        .check(lastEntry)
+        .set(["listening_history", currentTrack.timestamp], currentTrack)
+        .set(lastKey, currentTrack)
+        .commit();
     }
     return c.json({ playing: true, ...currentTrack });
   } catch {
@@ -387,6 +390,26 @@ app.get("/api/playlists/:id/tracks", async (c) => {
     },
   );
   return c.json(await res.json());
+});
+
+app.get("/api/history/cleanup", async (c) => {
+  const iter = kv.list({ prefix: ["listening_history"] }, { reverse: false });
+  let lastUri = "";
+  let deletedCount = 0;
+
+  for await (const entry of iter) {
+    if (entry.key[1] === "latest") continue;
+
+    const track = entry.value as { uri: string };
+    if (track.uri === lastUri) {
+      await kv.delete(entry.key);
+      deletedCount++;
+    } else {
+      lastUri = track.uri;
+    }
+  }
+
+  return c.json({ status: "success", deletedCount });
 });
 
 // KV Admin
