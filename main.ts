@@ -48,6 +48,12 @@ interface SpotifyAlbumItem {
   };
 }
 
+interface SpotifyArtist {
+  id: string;
+  name: string;
+  genres?: string[];
+}
+
 /**
  * Helper Functions
  */
@@ -125,8 +131,26 @@ async function syncLibrary(token: string) {
       headers: { "Authorization": `Bearer ${token}` },
     });
     if (!resp.ok) break;
-    const data = await resp.json();
+    const data: { items: SpotifyAlbumItem[]; next: string | null } = await resp
+      .json();
     if (!data.items) break;
+
+    const artistIds = [...new Set(data.items.map((i) => i.album.artists[0].id))]
+      .join(",");
+    const genreMap: Record<string, string[]> = {};
+
+    if (artistIds) {
+      const artRes = await fetch(
+        `https://api.spotify.com/v1/artists?ids=${artistIds}`,
+        {
+          headers: { "Authorization": `Bearer ${token}` },
+        },
+      );
+      if (artRes.ok) {
+        const artData: { artists: SpotifyArtist[] } = await artRes.json();
+        artData.artists.forEach((a) => genreMap[a.id] = a.genres || []);
+      }
+    }
 
     const items: Album[] = data.items.map((i: SpotifyAlbumItem) => ({
       name: i.album.name,
@@ -136,7 +160,7 @@ async function syncLibrary(token: string) {
       cover: i.album.images[0]?.url || "",
       link: i.album.external_urls.spotify,
       uri: i.album.uri,
-      genres: [], // Optimization: skip genres for fast sync
+      genres: genreMap[i.album.artists[0].id] || [],
       popularity: i.album.popularity || 0,
       added_at: i.added_at,
     }));
@@ -259,17 +283,36 @@ app.get("/api/now-playing", async (c) => {
     const data = await res.json();
     if (!data.item) return c.json({ playing: false });
 
+    const artistIds = data.item.artists.map((a: SpotifyArtist) => a.id).join(
+      ",",
+    );
+    let genres: string[] = [];
+    if (artistIds) {
+      const artRes = await fetch(
+        `https://api.spotify.com/v1/artists?ids=${artistIds}`,
+        { headers: { "Authorization": `Bearer ${token}` } },
+      );
+      if (artRes.ok) {
+        const artData: { artists: SpotifyArtist[] } = await artRes.json();
+        genres = [
+          ...new Set(artData.artists.flatMap((a) => a.genres || [])),
+        ] as string[];
+      }
+    }
+
     const currentTrack = {
       name: data.item.name,
-      artist: data.item.artists.map((a: any) => a.name).join(", "),
+      artist: data.item.artists.map((a: SpotifyArtist) => a.name).join(", "),
       album: data.item.album.name,
       cover: data.item.album.images[0]?.url || "",
       link: data.item.external_urls.spotify,
+      uri: data.item.uri,
       timestamp: Date.now(),
+      genres,
     };
 
     const lastKey = ["listening_history", "latest"];
-    const lastEntry = await kv.get<any>(lastKey);
+    const lastEntry = await kv.get<{ name: string; artist: string }>(lastKey);
 
     if (
       !lastEntry.value || lastEntry.value.name !== currentTrack.name ||

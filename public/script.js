@@ -3,6 +3,7 @@
  */
 let allAlbums = [];
 let allPlaylists = [];
+let allHistory = [];
 let historyCursor = null;
 let isSyncing = false;
 let searchTimeout;
@@ -194,17 +195,24 @@ async function fetchHistory() {
   try {
     const url = new URL("api/history", globalThis.location.origin);
     url.searchParams.append("limit", "50");
+    const isAppending = !!historyCursor;
     if (historyCursor) url.searchParams.append("cursor", historyCursor);
 
     const res = await fetch(url);
     const { history = [], nextCursor } = await res.json();
 
+    allHistory = isAppending ? [...allHistory, ...history] : history;
     historyCursor = nextCursor;
-    renderTracks(container, history, {
-      isGrid: true,
-      isHistory: true,
-      append: true,
-    });
+
+    if (document.getElementById("history-search").value) {
+      renderFilteredHistory();
+    } else {
+      renderTracks(container, history, {
+        isGrid: true,
+        isHistory: true,
+        append: isAppending,
+      });
+    }
     loadMoreBtn.style.display = historyCursor ? "block" : "none";
   } catch (e) {
     console.error("History failed", e);
@@ -288,6 +296,47 @@ function renderFilteredAlbums() {
   document.getElementById("album-count").textContent = filtered.length;
 }
 
+function renderFilteredHistory() {
+  const query = document.getElementById("history-search").value.toLowerCase();
+  const container = document.getElementById("history-list");
+  const loadMoreBtn = document.getElementById("load-more-history");
+
+  if (!query) {
+    container.innerHTML = "";
+    renderTracks(container, allHistory, { isGrid: true, isHistory: true });
+    loadMoreBtn.style.display = historyCursor ? "block" : "none";
+    return;
+  }
+
+  let searchPattern = query.toLowerCase().replace(/'/gi, "");
+  searchPattern = searchPattern
+    .replace(/a/gi, "[aàáâãäåæāăąǎǟǡǻȁȃȧ]")
+    .replace(/e/gi, "[eèéêëēĕėęěȅȇȩ]")
+    .replace(/i/gi, "[iìíîïĩīĭįǐȉȋ]")
+    .replace(/o/gi, "[oòóôõöøōŏőœơǒǫǭȍȏȫȭȯȱ]")
+    .replace(/u/gi, "[uùúûüũūŭůűųưǔǖǘǚǜȕȗ]");
+
+  const searchRegex = new RegExp(searchPattern, "i");
+
+  const filtered = allHistory.filter((item) => {
+    const songName = (item.name || "").toLowerCase().replace(/'/gi, "");
+    const artistName = (item.artist || "").toLowerCase().replace(/'/gi, "");
+    const albumName = (item.album || "").toLowerCase().replace(/'/gi, "");
+    const genres = (item.genres || []).join(" ").toLowerCase().replace(
+      /'/gi,
+      "",
+    );
+
+    return searchRegex.test(songName) ||
+      searchRegex.test(artistName) ||
+      searchRegex.test(albumName) ||
+      searchRegex.test(genres);
+  });
+
+  renderTracks(container, filtered, { isGrid: true, isHistory: true });
+  loadMoreBtn.style.display = "none"; // Hide load more when filtering
+}
+
 function renderPlaylists(items) {
   const grid = document.getElementById("playlists-grid");
   const template = document.getElementById("playlist-card-template");
@@ -306,8 +355,12 @@ function renderPlaylists(items) {
 }
 
 function renderTracks(container, tracks, options = {}) {
-  const { isGrid = false, isHistory = false, append = false, isAlbum = false } =
-    options;
+  const {
+    _isGrid = false,
+    isHistory = false,
+    append = false,
+    isAlbum = false,
+  } = options;
   if (!append) container.innerHTML = "";
 
   const template = document.getElementById("album-card-template");
@@ -326,8 +379,13 @@ function renderTracks(container, tracks, options = {}) {
     if (isHistory && track.timestamp) sub += ` • ${timeAgo(track.timestamp)}`;
     clone.querySelector(".album-artist").textContent = sub;
 
-    if (isAlbum) {
-      clone.querySelector(".album-year").textContent = track.year;
+    if (isAlbum || (isHistory && track.genres?.length)) {
+      if (isAlbum) {
+        clone.querySelector(".album-year").textContent = track.year;
+      } else {
+        clone.querySelector(".album-year").style.display = "none";
+      }
+
       clone.querySelector(".genre-list").textContent =
         track.genres?.join(", ") || "No words could ever describe this 🦄";
 
@@ -401,13 +459,24 @@ const filterInputs = [
   "decade-filter",
   "genre-filter",
   "sort-select",
+  "history-search",
 ];
 filterInputs.forEach((id) => {
-  document.getElementById(id).onchange = renderFilteredAlbums;
-  if (id === "search-input") {
-    document.getElementById(id).oninput = () => {
+  const el = document.getElementById(id);
+  if (!el) return;
+
+  el.onchange = () => {
+    if (id === "history-search") renderFilteredHistory();
+    else renderFilteredAlbums();
+  };
+
+  if (id === "search-input" || id === "history-search") {
+    el.oninput = () => {
       clearTimeout(searchTimeout);
-      searchTimeout = setTimeout(renderFilteredAlbums, 300);
+      searchTimeout = setTimeout(() => {
+        if (id === "history-search") renderFilteredHistory();
+        else renderFilteredAlbums();
+      }, 300);
     };
   }
 });
@@ -436,7 +505,7 @@ async function updateNowPlaying() {
     } else {
       banner.style.display = "none";
     }
-  } catch (e) {
+  } catch (_e) {
     banner.style.display = "none";
   }
 }
