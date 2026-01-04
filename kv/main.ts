@@ -1,8 +1,7 @@
 import { Context, Hono } from "hono";
 import { serveStatic } from "hono/deno";
-const DENO_KV_URL = Deno.env.get("KV_URL");
 const kv = Deno.env.get("DENO_DEPLOYMENT_ID")
-  ? await Deno.openKv(DENO_KV_URL) // Deno Deploy
+  ? await Deno.openKv() // Deno Deploy
   : await Deno.openKv("./db/kv.db"); // Docker
 
 export async function listEntries(c: Context) {
